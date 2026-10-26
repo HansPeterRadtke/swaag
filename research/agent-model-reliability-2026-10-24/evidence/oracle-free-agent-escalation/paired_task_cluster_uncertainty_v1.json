@@ -1,0 +1,2380 @@
+{
+  "bootstrap_comparisons": [
+    {
+      "architecture": "multi-agent-independent",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "cross_benchmark_failure_risk_budget_20pct",
+      "comparison_policy": "never",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "swebench-verified",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.128571,
+            0.278571
+          ],
+          "fraction_of_model_task_units": 0.2,
+          "value_per_140_model_task_units": 28
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.021429,
+            0.064286
+          ],
+          "fraction_of_model_task_units": 0.021429,
+          "value_per_140_model_task_units": 3
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.014286,
+            0.064286
+          ],
+          "fraction_of_model_task_units": 0.035714,
+          "value_per_140_model_task_units": 5
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-independent",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "cross_benchmark_failure_risk_budget_20pct",
+      "comparison_policy": "no_output",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "swebench-verified",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.028571,
+            0.178571
+          ],
+          "fraction_of_model_task_units": 0.1,
+          "value_per_140_model_task_units": 14
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.042857,
+            0.0
+          ],
+          "fraction_of_model_task_units": -0.021429,
+          "value_per_140_model_task_units": -3
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.007143,
+            0.064286
+          ],
+          "fraction_of_model_task_units": 0.035714,
+          "value_per_140_model_task_units": 5
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-independent",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "cross_benchmark_failure_risk_budget_20pct",
+      "comparison_policy": "hash_budget_20pct",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "swebench-verified",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.085714,
+            0.092857
+          ],
+          "fraction_of_model_task_units": 0.0,
+          "value_per_140_model_task_units": 0
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.007143,
+            0.071429
+          ],
+          "fraction_of_model_task_units": 0.035714,
+          "value_per_140_model_task_units": 5
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.128571,
+            0.0
+          ],
+          "fraction_of_model_task_units": -0.064286,
+          "value_per_140_model_task_units": -9
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-independent",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output_then_hash_budget_20pct",
+      "comparison_policy": "never",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "swebench-verified",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.128571,
+            0.278571
+          ],
+          "fraction_of_model_task_units": 0.2,
+          "value_per_140_model_task_units": 28
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.021429,
+            0.064286
+          ],
+          "fraction_of_model_task_units": 0.021429,
+          "value_per_140_model_task_units": 3
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.021429,
+            0.114286
+          ],
+          "fraction_of_model_task_units": 0.064286,
+          "value_per_140_model_task_units": 9
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-independent",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output_then_hash_budget_20pct",
+      "comparison_policy": "no_output",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "swebench-verified",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.05,
+            0.164286
+          ],
+          "fraction_of_model_task_units": 0.1,
+          "value_per_140_model_task_units": 14
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.042857,
+            0.0
+          ],
+          "fraction_of_model_task_units": -0.021429,
+          "value_per_140_model_task_units": -3
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.021429,
+            0.114286
+          ],
+          "fraction_of_model_task_units": 0.064286,
+          "value_per_140_model_task_units": 9
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-independent",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output_then_hash_budget_20pct",
+      "comparison_policy": "hash_budget_20pct",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "swebench-verified",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.057143,
+            0.05
+          ],
+          "fraction_of_model_task_units": 0.0,
+          "value_per_140_model_task_units": 0
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.014286,
+            0.064286
+          ],
+          "fraction_of_model_task_units": 0.035714,
+          "value_per_140_model_task_units": 5
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.064286,
+            -0.014286
+          ],
+          "fraction_of_model_task_units": -0.035714,
+          "value_per_140_model_task_units": -5
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-independent",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output",
+      "comparison_policy": "never",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "swebench-verified",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.064286,
+            0.135714
+          ],
+          "fraction_of_model_task_units": 0.1,
+          "value_per_140_model_task_units": 14
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.014286,
+            0.078571
+          ],
+          "fraction_of_model_task_units": 0.042857,
+          "value_per_140_model_task_units": 6
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.0,
+            0.0
+          ],
+          "fraction_of_model_task_units": 0.0,
+          "value_per_140_model_task_units": 0
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-independent",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output",
+      "comparison_policy": "hash_budget_20pct",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "swebench-verified",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.171429,
+            -0.035714
+          ],
+          "fraction_of_model_task_units": -0.1,
+          "value_per_140_model_task_units": -14
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.028571,
+            0.085714
+          ],
+          "fraction_of_model_task_units": 0.057143,
+          "value_per_140_model_task_units": 8
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.15,
+            -0.05
+          ],
+          "fraction_of_model_task_units": -0.1,
+          "value_per_140_model_task_units": -14
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-centralized",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "cross_benchmark_failure_risk_budget_20pct",
+      "comparison_policy": "never",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "swebench-verified",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.128571,
+            0.292857
+          ],
+          "fraction_of_model_task_units": 0.2,
+          "value_per_140_model_task_units": 28
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.014286,
+            0.085714
+          ],
+          "fraction_of_model_task_units": 0.035714,
+          "value_per_140_model_task_units": 5
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.007143,
+            0.064286
+          ],
+          "fraction_of_model_task_units": 0.035714,
+          "value_per_140_model_task_units": 5
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-centralized",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "cross_benchmark_failure_risk_budget_20pct",
+      "comparison_policy": "no_output",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "swebench-verified",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.028571,
+            0.178571
+          ],
+          "fraction_of_model_task_units": 0.1,
+          "value_per_140_model_task_units": 14
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.042857,
+            0.014286
+          ],
+          "fraction_of_model_task_units": -0.014286,
+          "value_per_140_model_task_units": -2
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.014286,
+            0.064286
+          ],
+          "fraction_of_model_task_units": 0.035714,
+          "value_per_140_model_task_units": 5
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-centralized",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "cross_benchmark_failure_risk_budget_20pct",
+      "comparison_policy": "hash_budget_20pct",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "swebench-verified",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.078571,
+            0.092857
+          ],
+          "fraction_of_model_task_units": 0.0,
+          "value_per_140_model_task_units": 0
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.014286,
+            0.085714
+          ],
+          "fraction_of_model_task_units": 0.035714,
+          "value_per_140_model_task_units": 5
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.135714,
+            -0.007143
+          ],
+          "fraction_of_model_task_units": -0.064286,
+          "value_per_140_model_task_units": -9
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-centralized",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output_then_hash_budget_20pct",
+      "comparison_policy": "never",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "swebench-verified",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.121429,
+            0.292857
+          ],
+          "fraction_of_model_task_units": 0.2,
+          "value_per_140_model_task_units": 28
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.007143,
+            0.078571
+          ],
+          "fraction_of_model_task_units": 0.042857,
+          "value_per_140_model_task_units": 6
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.021429,
+            0.121429
+          ],
+          "fraction_of_model_task_units": 0.064286,
+          "value_per_140_model_task_units": 9
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-centralized",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output_then_hash_budget_20pct",
+      "comparison_policy": "no_output",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "swebench-verified",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.042857,
+            0.157143
+          ],
+          "fraction_of_model_task_units": 0.1,
+          "value_per_140_model_task_units": 14
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.035714,
+            0.021429
+          ],
+          "fraction_of_model_task_units": -0.007143,
+          "value_per_140_model_task_units": -1
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.021429,
+            0.114286
+          ],
+          "fraction_of_model_task_units": 0.064286,
+          "value_per_140_model_task_units": 9
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-centralized",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output_then_hash_budget_20pct",
+      "comparison_policy": "hash_budget_20pct",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "swebench-verified",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.057143,
+            0.057143
+          ],
+          "fraction_of_model_task_units": 0.0,
+          "value_per_140_model_task_units": 0
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.014286,
+            0.071429
+          ],
+          "fraction_of_model_task_units": 0.042857,
+          "value_per_140_model_task_units": 6
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.064286,
+            -0.014286
+          ],
+          "fraction_of_model_task_units": -0.035714,
+          "value_per_140_model_task_units": -5
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-centralized",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output",
+      "comparison_policy": "never",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "swebench-verified",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.064286,
+            0.135714
+          ],
+          "fraction_of_model_task_units": 0.1,
+          "value_per_140_model_task_units": 14
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.021429,
+            0.085714
+          ],
+          "fraction_of_model_task_units": 0.05,
+          "value_per_140_model_task_units": 7
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.0,
+            0.0
+          ],
+          "fraction_of_model_task_units": 0.0,
+          "value_per_140_model_task_units": 0
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-centralized",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output",
+      "comparison_policy": "hash_budget_20pct",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "swebench-verified",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.171429,
+            -0.028571
+          ],
+          "fraction_of_model_task_units": -0.1,
+          "value_per_140_model_task_units": -14
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.007143,
+            0.092857
+          ],
+          "fraction_of_model_task_units": 0.05,
+          "value_per_140_model_task_units": 7
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.157143,
+            -0.05
+          ],
+          "fraction_of_model_task_units": -0.1,
+          "value_per_140_model_task_units": -14
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-decentralized",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "cross_benchmark_failure_risk_budget_20pct",
+      "comparison_policy": "never",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "swebench-verified",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.128571,
+            0.278571
+          ],
+          "fraction_of_model_task_units": 0.2,
+          "value_per_140_model_task_units": 28
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.0,
+            0.071429
+          ],
+          "fraction_of_model_task_units": 0.035714,
+          "value_per_140_model_task_units": 5
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.014286,
+            0.064286
+          ],
+          "fraction_of_model_task_units": 0.035714,
+          "value_per_140_model_task_units": 5
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-decentralized",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "cross_benchmark_failure_risk_budget_20pct",
+      "comparison_policy": "no_output",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "swebench-verified",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.035714,
+            0.178571
+          ],
+          "fraction_of_model_task_units": 0.1,
+          "value_per_140_model_task_units": 14
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.021429,
+            0.021429
+          ],
+          "fraction_of_model_task_units": 0.0,
+          "value_per_140_model_task_units": 0
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.014286,
+            0.064286
+          ],
+          "fraction_of_model_task_units": 0.035714,
+          "value_per_140_model_task_units": 5
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-decentralized",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "cross_benchmark_failure_risk_budget_20pct",
+      "comparison_policy": "hash_budget_20pct",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "swebench-verified",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.1,
+            0.092857
+          ],
+          "fraction_of_model_task_units": 0.0,
+          "value_per_140_model_task_units": 0
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.007143,
+            0.078571
+          ],
+          "fraction_of_model_task_units": 0.042857,
+          "value_per_140_model_task_units": 6
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.135714,
+            0.0
+          ],
+          "fraction_of_model_task_units": -0.064286,
+          "value_per_140_model_task_units": -9
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-decentralized",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output_then_hash_budget_20pct",
+      "comparison_policy": "never",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "swebench-verified",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.128571,
+            0.278571
+          ],
+          "fraction_of_model_task_units": 0.2,
+          "value_per_140_model_task_units": 28
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.014286,
+            0.057143
+          ],
+          "fraction_of_model_task_units": 0.021429,
+          "value_per_140_model_task_units": 3
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.021429,
+            0.114286
+          ],
+          "fraction_of_model_task_units": 0.064286,
+          "value_per_140_model_task_units": 9
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-decentralized",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output_then_hash_budget_20pct",
+      "comparison_policy": "no_output",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "swebench-verified",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.05,
+            0.157143
+          ],
+          "fraction_of_model_task_units": 0.1,
+          "value_per_140_model_task_units": 14
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.042857,
+            0.014286
+          ],
+          "fraction_of_model_task_units": -0.014286,
+          "value_per_140_model_task_units": -2
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.021429,
+            0.107143
+          ],
+          "fraction_of_model_task_units": 0.064286,
+          "value_per_140_model_task_units": 9
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-decentralized",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output_then_hash_budget_20pct",
+      "comparison_policy": "hash_budget_20pct",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "swebench-verified",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.057143,
+            0.057143
+          ],
+          "fraction_of_model_task_units": 0.0,
+          "value_per_140_model_task_units": 0
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.007143,
+            0.057143
+          ],
+          "fraction_of_model_task_units": 0.028571,
+          "value_per_140_model_task_units": 4
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.064286,
+            -0.007143
+          ],
+          "fraction_of_model_task_units": -0.035714,
+          "value_per_140_model_task_units": -5
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-decentralized",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output",
+      "comparison_policy": "never",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "swebench-verified",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.064286,
+            0.135714
+          ],
+          "fraction_of_model_task_units": 0.1,
+          "value_per_140_model_task_units": 14
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.007143,
+            0.064286
+          ],
+          "fraction_of_model_task_units": 0.035714,
+          "value_per_140_model_task_units": 5
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.0,
+            0.0
+          ],
+          "fraction_of_model_task_units": 0.0,
+          "value_per_140_model_task_units": 0
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-decentralized",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output",
+      "comparison_policy": "hash_budget_20pct",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "swebench-verified",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.178571,
+            -0.035714
+          ],
+          "fraction_of_model_task_units": -0.1,
+          "value_per_140_model_task_units": -14
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.007143,
+            0.071429
+          ],
+          "fraction_of_model_task_units": 0.042857,
+          "value_per_140_model_task_units": 6
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.157143,
+            -0.05
+          ],
+          "fraction_of_model_task_units": -0.1,
+          "value_per_140_model_task_units": -14
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-hybrid",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "cross_benchmark_failure_risk_budget_20pct",
+      "comparison_policy": "never",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "swebench-verified",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.135714,
+            0.285714
+          ],
+          "fraction_of_model_task_units": 0.2,
+          "value_per_140_model_task_units": 28
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.014286,
+            0.071429
+          ],
+          "fraction_of_model_task_units": 0.028571,
+          "value_per_140_model_task_units": 4
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.014286,
+            0.064286
+          ],
+          "fraction_of_model_task_units": 0.035714,
+          "value_per_140_model_task_units": 5
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-hybrid",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "cross_benchmark_failure_risk_budget_20pct",
+      "comparison_policy": "no_output",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "swebench-verified",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.028571,
+            0.178571
+          ],
+          "fraction_of_model_task_units": 0.1,
+          "value_per_140_model_task_units": 14
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.035714,
+            0.0
+          ],
+          "fraction_of_model_task_units": -0.014286,
+          "value_per_140_model_task_units": -2
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.007143,
+            0.064286
+          ],
+          "fraction_of_model_task_units": 0.035714,
+          "value_per_140_model_task_units": 5
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-hybrid",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "cross_benchmark_failure_risk_budget_20pct",
+      "comparison_policy": "hash_budget_20pct",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "swebench-verified",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.092857,
+            0.092857
+          ],
+          "fraction_of_model_task_units": 0.0,
+          "value_per_140_model_task_units": 0
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.0,
+            0.092857
+          ],
+          "fraction_of_model_task_units": 0.042857,
+          "value_per_140_model_task_units": 6
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.128571,
+            0.0
+          ],
+          "fraction_of_model_task_units": -0.064286,
+          "value_per_140_model_task_units": -9
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-hybrid",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output_then_hash_budget_20pct",
+      "comparison_policy": "never",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "swebench-verified",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.128571,
+            0.292857
+          ],
+          "fraction_of_model_task_units": 0.2,
+          "value_per_140_model_task_units": 28
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.007143,
+            0.05
+          ],
+          "fraction_of_model_task_units": 0.021429,
+          "value_per_140_model_task_units": 3
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.021429,
+            0.114286
+          ],
+          "fraction_of_model_task_units": 0.064286,
+          "value_per_140_model_task_units": 9
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-hybrid",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output_then_hash_budget_20pct",
+      "comparison_policy": "no_output",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "swebench-verified",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.05,
+            0.157143
+          ],
+          "fraction_of_model_task_units": 0.1,
+          "value_per_140_model_task_units": 14
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.042857,
+            0.0
+          ],
+          "fraction_of_model_task_units": -0.021429,
+          "value_per_140_model_task_units": -3
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.021429,
+            0.114286
+          ],
+          "fraction_of_model_task_units": 0.064286,
+          "value_per_140_model_task_units": 9
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-hybrid",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output_then_hash_budget_20pct",
+      "comparison_policy": "hash_budget_20pct",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "swebench-verified",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.057143,
+            0.057143
+          ],
+          "fraction_of_model_task_units": 0.0,
+          "value_per_140_model_task_units": 0
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.014286,
+            0.064286
+          ],
+          "fraction_of_model_task_units": 0.035714,
+          "value_per_140_model_task_units": 5
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.064286,
+            -0.014286
+          ],
+          "fraction_of_model_task_units": -0.035714,
+          "value_per_140_model_task_units": -5
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-hybrid",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output",
+      "comparison_policy": "never",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "swebench-verified",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.064286,
+            0.135714
+          ],
+          "fraction_of_model_task_units": 0.1,
+          "value_per_140_model_task_units": 14
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.014286,
+            0.078571
+          ],
+          "fraction_of_model_task_units": 0.042857,
+          "value_per_140_model_task_units": 6
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.0,
+            0.0
+          ],
+          "fraction_of_model_task_units": 0.0,
+          "value_per_140_model_task_units": 0
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-hybrid",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output",
+      "comparison_policy": "hash_budget_20pct",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "swebench-verified",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.171429,
+            -0.035714
+          ],
+          "fraction_of_model_task_units": -0.1,
+          "value_per_140_model_task_units": -14
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.021429,
+            0.1
+          ],
+          "fraction_of_model_task_units": 0.057143,
+          "value_per_140_model_task_units": 8
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.164286,
+            -0.05
+          ],
+          "fraction_of_model_task_units": -0.1,
+          "value_per_140_model_task_units": -14
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-independent",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "cross_benchmark_failure_risk_budget_20pct",
+      "comparison_policy": "never",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "terminalbench",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.1,
+            0.321429
+          ],
+          "fraction_of_model_task_units": 0.2,
+          "value_per_140_model_task_units": 28
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.007143,
+            0.085714
+          ],
+          "fraction_of_model_task_units": 0.042857,
+          "value_per_140_model_task_units": 6
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.0,
+            0.021429
+          ],
+          "fraction_of_model_task_units": 0.007143,
+          "value_per_140_model_task_units": 1
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-independent",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "cross_benchmark_failure_risk_budget_20pct",
+      "comparison_policy": "no_output",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "terminalbench",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.028571,
+            0.107143
+          ],
+          "fraction_of_model_task_units": 0.064286,
+          "value_per_140_model_task_units": 9
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.0,
+            0.035714
+          ],
+          "fraction_of_model_task_units": 0.014286,
+          "value_per_140_model_task_units": 2
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.0,
+            0.021429
+          ],
+          "fraction_of_model_task_units": 0.007143,
+          "value_per_140_model_task_units": 1
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-independent",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "cross_benchmark_failure_risk_budget_20pct",
+      "comparison_policy": "hash_budget_20pct",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "terminalbench",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.121429,
+            0.142857
+          ],
+          "fraction_of_model_task_units": 0.0,
+          "value_per_140_model_task_units": 0
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.014286,
+            0.107143
+          ],
+          "fraction_of_model_task_units": 0.057143,
+          "value_per_140_model_task_units": 8
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.114286,
+            -0.014286
+          ],
+          "fraction_of_model_task_units": -0.057143,
+          "value_per_140_model_task_units": -8
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-independent",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output_then_hash_budget_20pct",
+      "comparison_policy": "never",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "terminalbench",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.114286,
+            0.292857
+          ],
+          "fraction_of_model_task_units": 0.2,
+          "value_per_140_model_task_units": 28
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.007143,
+            0.064286
+          ],
+          "fraction_of_model_task_units": 0.028571,
+          "value_per_140_model_task_units": 4
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.0,
+            0.064286
+          ],
+          "fraction_of_model_task_units": 0.028571,
+          "value_per_140_model_task_units": 4
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-independent",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output_then_hash_budget_20pct",
+      "comparison_policy": "no_output",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "terminalbench",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.028571,
+            0.107143
+          ],
+          "fraction_of_model_task_units": 0.064286,
+          "value_per_140_model_task_units": 9
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.021429,
+            0.021429
+          ],
+          "fraction_of_model_task_units": 0.0,
+          "value_per_140_model_task_units": 0
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.0,
+            0.064286
+          ],
+          "fraction_of_model_task_units": 0.028571,
+          "value_per_140_model_task_units": 4
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-independent",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output_then_hash_budget_20pct",
+      "comparison_policy": "hash_budget_20pct",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "terminalbench",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.092857,
+            0.121429
+          ],
+          "fraction_of_model_task_units": 0.0,
+          "value_per_140_model_task_units": 0
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.007143,
+            0.092857
+          ],
+          "fraction_of_model_task_units": 0.042857,
+          "value_per_140_model_task_units": 6
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.085714,
+            0.0
+          ],
+          "fraction_of_model_task_units": -0.035714,
+          "value_per_140_model_task_units": -5
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-independent",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output",
+      "comparison_policy": "never",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "terminalbench",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.05,
+            0.235714
+          ],
+          "fraction_of_model_task_units": 0.135714,
+          "value_per_140_model_task_units": 19
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.0,
+            0.064286
+          ],
+          "fraction_of_model_task_units": 0.028571,
+          "value_per_140_model_task_units": 4
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.0,
+            0.0
+          ],
+          "fraction_of_model_task_units": 0.0,
+          "value_per_140_model_task_units": 0
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-independent",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output",
+      "comparison_policy": "hash_budget_20pct",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "terminalbench",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.178571,
+            0.057143
+          ],
+          "fraction_of_model_task_units": -0.064286,
+          "value_per_140_model_task_units": -9
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.0,
+            0.092857
+          ],
+          "fraction_of_model_task_units": 0.042857,
+          "value_per_140_model_task_units": 6
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.128571,
+            -0.021429
+          ],
+          "fraction_of_model_task_units": -0.064286,
+          "value_per_140_model_task_units": -9
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-centralized",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "cross_benchmark_failure_risk_budget_20pct",
+      "comparison_policy": "never",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "terminalbench",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.092857,
+            0.321429
+          ],
+          "fraction_of_model_task_units": 0.2,
+          "value_per_140_model_task_units": 28
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.014286,
+            0.071429
+          ],
+          "fraction_of_model_task_units": 0.042857,
+          "value_per_140_model_task_units": 6
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.0,
+            0.021429
+          ],
+          "fraction_of_model_task_units": 0.007143,
+          "value_per_140_model_task_units": 1
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-centralized",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "cross_benchmark_failure_risk_budget_20pct",
+      "comparison_policy": "no_output",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "terminalbench",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.021429,
+            0.114286
+          ],
+          "fraction_of_model_task_units": 0.064286,
+          "value_per_140_model_task_units": 9
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.0,
+            0.021429
+          ],
+          "fraction_of_model_task_units": 0.007143,
+          "value_per_140_model_task_units": 1
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.0,
+            0.021429
+          ],
+          "fraction_of_model_task_units": 0.007143,
+          "value_per_140_model_task_units": 1
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-centralized",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "cross_benchmark_failure_risk_budget_20pct",
+      "comparison_policy": "hash_budget_20pct",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "terminalbench",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.142857,
+            0.15
+          ],
+          "fraction_of_model_task_units": 0.0,
+          "value_per_140_model_task_units": 0
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.014286,
+            0.135714
+          ],
+          "fraction_of_model_task_units": 0.071429,
+          "value_per_140_model_task_units": 10
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.121429,
+            -0.014286
+          ],
+          "fraction_of_model_task_units": -0.057143,
+          "value_per_140_model_task_units": -8
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-centralized",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output_then_hash_budget_20pct",
+      "comparison_policy": "never",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "terminalbench",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.114286,
+            0.292857
+          ],
+          "fraction_of_model_task_units": 0.2,
+          "value_per_140_model_task_units": 28
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.014286,
+            0.057143
+          ],
+          "fraction_of_model_task_units": 0.021429,
+          "value_per_140_model_task_units": 3
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.0,
+            0.064286
+          ],
+          "fraction_of_model_task_units": 0.028571,
+          "value_per_140_model_task_units": 4
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-centralized",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output_then_hash_budget_20pct",
+      "comparison_policy": "no_output",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "terminalbench",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.021429,
+            0.107143
+          ],
+          "fraction_of_model_task_units": 0.064286,
+          "value_per_140_model_task_units": 9
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.042857,
+            0.014286
+          ],
+          "fraction_of_model_task_units": -0.014286,
+          "value_per_140_model_task_units": -2
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.0,
+            0.064286
+          ],
+          "fraction_of_model_task_units": 0.028571,
+          "value_per_140_model_task_units": 4
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-centralized",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output_then_hash_budget_20pct",
+      "comparison_policy": "hash_budget_20pct",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "terminalbench",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.1,
+            0.114286
+          ],
+          "fraction_of_model_task_units": 0.0,
+          "value_per_140_model_task_units": 0
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.014286,
+            0.107143
+          ],
+          "fraction_of_model_task_units": 0.05,
+          "value_per_140_model_task_units": 7
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.085714,
+            0.0
+          ],
+          "fraction_of_model_task_units": -0.035714,
+          "value_per_140_model_task_units": -5
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-centralized",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output",
+      "comparison_policy": "never",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "terminalbench",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.05,
+            0.235714
+          ],
+          "fraction_of_model_task_units": 0.135714,
+          "value_per_140_model_task_units": 19
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.014286,
+            0.064286
+          ],
+          "fraction_of_model_task_units": 0.035714,
+          "value_per_140_model_task_units": 5
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.0,
+            0.0
+          ],
+          "fraction_of_model_task_units": 0.0,
+          "value_per_140_model_task_units": 0
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-centralized",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output",
+      "comparison_policy": "hash_budget_20pct",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "terminalbench",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.185714,
+            0.057143
+          ],
+          "fraction_of_model_task_units": -0.064286,
+          "value_per_140_model_task_units": -9
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.014286,
+            0.114286
+          ],
+          "fraction_of_model_task_units": 0.064286,
+          "value_per_140_model_task_units": 9
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.121429,
+            -0.014286
+          ],
+          "fraction_of_model_task_units": -0.064286,
+          "value_per_140_model_task_units": -9
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-decentralized",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "cross_benchmark_failure_risk_budget_20pct",
+      "comparison_policy": "never",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "terminalbench",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.092857,
+            0.321429
+          ],
+          "fraction_of_model_task_units": 0.2,
+          "value_per_140_model_task_units": 28
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.014286,
+            0.085714
+          ],
+          "fraction_of_model_task_units": 0.05,
+          "value_per_140_model_task_units": 7
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.0,
+            0.021429
+          ],
+          "fraction_of_model_task_units": 0.007143,
+          "value_per_140_model_task_units": 1
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-decentralized",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "cross_benchmark_failure_risk_budget_20pct",
+      "comparison_policy": "no_output",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "terminalbench",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.021429,
+            0.114286
+          ],
+          "fraction_of_model_task_units": 0.064286,
+          "value_per_140_model_task_units": 9
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.0,
+            0.021429
+          ],
+          "fraction_of_model_task_units": 0.007143,
+          "value_per_140_model_task_units": 1
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.0,
+            0.021429
+          ],
+          "fraction_of_model_task_units": 0.007143,
+          "value_per_140_model_task_units": 1
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-decentralized",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "cross_benchmark_failure_risk_budget_20pct",
+      "comparison_policy": "hash_budget_20pct",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "terminalbench",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.128571,
+            0.157143
+          ],
+          "fraction_of_model_task_units": 0.0,
+          "value_per_140_model_task_units": 0
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.014286,
+            0.121429
+          ],
+          "fraction_of_model_task_units": 0.064286,
+          "value_per_140_model_task_units": 9
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.114286,
+            -0.007143
+          ],
+          "fraction_of_model_task_units": -0.057143,
+          "value_per_140_model_task_units": -8
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-decentralized",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output_then_hash_budget_20pct",
+      "comparison_policy": "never",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "terminalbench",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.114286,
+            0.292857
+          ],
+          "fraction_of_model_task_units": 0.2,
+          "value_per_140_model_task_units": 28
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.007143,
+            0.071429
+          ],
+          "fraction_of_model_task_units": 0.028571,
+          "value_per_140_model_task_units": 4
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.0,
+            0.064286
+          ],
+          "fraction_of_model_task_units": 0.028571,
+          "value_per_140_model_task_units": 4
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-decentralized",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output_then_hash_budget_20pct",
+      "comparison_policy": "no_output",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "terminalbench",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.028571,
+            0.114286
+          ],
+          "fraction_of_model_task_units": 0.064286,
+          "value_per_140_model_task_units": 9
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.035714,
+            0.0
+          ],
+          "fraction_of_model_task_units": -0.014286,
+          "value_per_140_model_task_units": -2
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.0,
+            0.064286
+          ],
+          "fraction_of_model_task_units": 0.028571,
+          "value_per_140_model_task_units": 4
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-decentralized",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output_then_hash_budget_20pct",
+      "comparison_policy": "hash_budget_20pct",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "terminalbench",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.114286,
+            0.114286
+          ],
+          "fraction_of_model_task_units": 0.0,
+          "value_per_140_model_task_units": 0
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.007143,
+            0.085714
+          ],
+          "fraction_of_model_task_units": 0.042857,
+          "value_per_140_model_task_units": 6
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.085714,
+            0.0
+          ],
+          "fraction_of_model_task_units": -0.035714,
+          "value_per_140_model_task_units": -5
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-decentralized",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output",
+      "comparison_policy": "never",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "terminalbench",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.05,
+            0.242857
+          ],
+          "fraction_of_model_task_units": 0.135714,
+          "value_per_140_model_task_units": 19
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.014286,
+            0.078571
+          ],
+          "fraction_of_model_task_units": 0.042857,
+          "value_per_140_model_task_units": 6
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.0,
+            0.0
+          ],
+          "fraction_of_model_task_units": 0.0,
+          "value_per_140_model_task_units": 0
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-decentralized",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output",
+      "comparison_policy": "hash_budget_20pct",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "terminalbench",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.185714,
+            0.064286
+          ],
+          "fraction_of_model_task_units": -0.064286,
+          "value_per_140_model_task_units": -9
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.014286,
+            0.107143
+          ],
+          "fraction_of_model_task_units": 0.057143,
+          "value_per_140_model_task_units": 8
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.121429,
+            -0.014286
+          ],
+          "fraction_of_model_task_units": -0.064286,
+          "value_per_140_model_task_units": -9
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-hybrid",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "cross_benchmark_failure_risk_budget_20pct",
+      "comparison_policy": "never",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "terminalbench",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.1,
+            0.314286
+          ],
+          "fraction_of_model_task_units": 0.2,
+          "value_per_140_model_task_units": 28
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.014286,
+            0.078571
+          ],
+          "fraction_of_model_task_units": 0.042857,
+          "value_per_140_model_task_units": 6
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.0,
+            0.021429
+          ],
+          "fraction_of_model_task_units": 0.007143,
+          "value_per_140_model_task_units": 1
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-hybrid",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "cross_benchmark_failure_risk_budget_20pct",
+      "comparison_policy": "no_output",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "terminalbench",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.028571,
+            0.107143
+          ],
+          "fraction_of_model_task_units": 0.064286,
+          "value_per_140_model_task_units": 9
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.0,
+            0.0
+          ],
+          "fraction_of_model_task_units": 0.0,
+          "value_per_140_model_task_units": 0
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.0,
+            0.021429
+          ],
+          "fraction_of_model_task_units": 0.007143,
+          "value_per_140_model_task_units": 1
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-hybrid",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "cross_benchmark_failure_risk_budget_20pct",
+      "comparison_policy": "hash_budget_20pct",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "terminalbench",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.128571,
+            0.142857
+          ],
+          "fraction_of_model_task_units": 0.0,
+          "value_per_140_model_task_units": 0
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.021429,
+            0.114286
+          ],
+          "fraction_of_model_task_units": 0.064286,
+          "value_per_140_model_task_units": 9
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.114286,
+            -0.014286
+          ],
+          "fraction_of_model_task_units": -0.057143,
+          "value_per_140_model_task_units": -8
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-hybrid",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output_then_hash_budget_20pct",
+      "comparison_policy": "never",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "terminalbench",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.114286,
+            0.3
+          ],
+          "fraction_of_model_task_units": 0.2,
+          "value_per_140_model_task_units": 28
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.007143,
+            0.064286
+          ],
+          "fraction_of_model_task_units": 0.028571,
+          "value_per_140_model_task_units": 4
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.0,
+            0.064286
+          ],
+          "fraction_of_model_task_units": 0.028571,
+          "value_per_140_model_task_units": 4
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-hybrid",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output_then_hash_budget_20pct",
+      "comparison_policy": "no_output",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "terminalbench",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.021429,
+            0.107143
+          ],
+          "fraction_of_model_task_units": 0.064286,
+          "value_per_140_model_task_units": 9
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.035714,
+            0.0
+          ],
+          "fraction_of_model_task_units": -0.014286,
+          "value_per_140_model_task_units": -2
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.0,
+            0.064286
+          ],
+          "fraction_of_model_task_units": 0.028571,
+          "value_per_140_model_task_units": 4
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-hybrid",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output_then_hash_budget_20pct",
+      "comparison_policy": "hash_budget_20pct",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "terminalbench",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.107143,
+            0.114286
+          ],
+          "fraction_of_model_task_units": 0.0,
+          "value_per_140_model_task_units": 0
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.014286,
+            0.092857
+          ],
+          "fraction_of_model_task_units": 0.05,
+          "value_per_140_model_task_units": 7
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.085714,
+            0.0
+          ],
+          "fraction_of_model_task_units": -0.035714,
+          "value_per_140_model_task_units": -5
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-hybrid",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output",
+      "comparison_policy": "never",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "terminalbench",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.05,
+            0.242857
+          ],
+          "fraction_of_model_task_units": 0.135714,
+          "value_per_140_model_task_units": 19
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.014286,
+            0.078571
+          ],
+          "fraction_of_model_task_units": 0.042857,
+          "value_per_140_model_task_units": 6
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.0,
+            0.0
+          ],
+          "fraction_of_model_task_units": 0.0,
+          "value_per_140_model_task_units": 0
+        }
+      }
+    },
+    {
+      "architecture": "multi-agent-hybrid",
+      "bootstrap_resamples": 1000,
+      "candidate_policy": "no_output",
+      "comparison_policy": "hash_budget_20pct",
+      "disclaimer": "Intervals cluster only the 20 original tasks, do not incorporate model-family independence, retrospective policy selection or full inference/GPU costs.",
+      "domain": "terminalbench",
+      "models_repeated_per_task": 7,
+      "number_original_task_clusters": 20,
+      "number_source_task_model_evaluations": 140,
+      "paired_delays": {
+        "delta_additional_workflow": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.185714,
+            0.064286
+          ],
+          "fraction_of_model_task_units": -0.064286,
+          "value_per_140_model_task_units": -9
+        },
+        "delta_correct": {
+          "descriptive_task_cluster_interval_95pct": [
+            0.021429,
+            0.107143
+          ],
+          "fraction_of_model_task_units": 0.064286,
+          "value_per_140_model_task_units": 9
+        },
+        "delta_primary_error_trigger_false_positive": {
+          "descriptive_task_cluster_interval_95pct": [
+            -0.121429,
+            -0.014286
+          ],
+          "fraction_of_model_task_units": -0.064286,
+          "value_per_140_model_task_units": -9
+        }
+      }
+    }
+  ],
+  "claim_of_real_local_GPU_cost": false,
+  "exact_target_model_outcomes_not_available_to_deployable_selector": true,
+  "n_paired_policy_effects": 64,
+  "original_standalone_task_gold_used_only_in_scoring": true,
+  "source_case_ledger_sha256": "b5e00a03f401260eff5659c4f2ca66bd8367ee9f7f5b157dd0fff51769bde189",
+  "source_observable_decisions_sha256": "14d344d8878576a2c948c12c8329874431fe6495a1e369b8fb69dfae1fae1b31",
+  "source_result_sha256": "540b1d0cb97118c3766e11752b4f1e6b570db7160e69ee27fc6bc3bb5c882700",
+  "version": "externally_graded_20_task_cluster_escalation_delta_v1_20261026"
+}

@@ -1,0 +1,5602 @@
+[
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46935475,
+    "domain": "swebench-verified",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 74,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0000"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47261874,
+    "domain": "swebench-verified",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 152,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0001"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47114927,
+    "domain": "swebench-verified",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 110,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0002"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46840932,
+    "domain": "swebench-verified",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 60,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0003"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46947519,
+    "domain": "swebench-verified",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 76,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0004"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.4704367,
+    "domain": "swebench-verified",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 94,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0005"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47114927,
+    "domain": "swebench-verified",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 110,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0006"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47089486,
+    "domain": "swebench-verified",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 104,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0007"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.4682568,
+    "domain": "swebench-verified",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 58,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0008"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46935475,
+    "domain": "swebench-verified",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 74,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0009"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47296456,
+    "domain": "swebench-verified",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 164,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0010"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46869992,
+    "domain": "swebench-verified",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 64,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0011"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46981861,
+    "domain": "swebench-verified",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 82,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0012"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47098124,
+    "domain": "swebench-verified",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 106,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0013"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46776617,
+    "domain": "swebench-verified",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 52,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0014"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47071705,
+    "domain": "swebench-verified",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 100,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0015"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47003403,
+    "domain": "swebench-verified",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 86,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0016"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47080682,
+    "domain": "swebench-verified",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 102,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0017"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47243552,
+    "domain": "swebench-verified",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 146,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0018"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46910394,
+    "domain": "swebench-verified",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 70,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0019"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46636328,
+    "domain": "swebench-verified",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 38,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0000"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.45851773,
+    "domain": "swebench-verified",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 6,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": false,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0001"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46923106,
+    "domain": "swebench-verified",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 72,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0002"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46256826,
+    "domain": "swebench-verified",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 16,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0003"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46353363,
+    "domain": "swebench-verified",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 20,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0004"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46394932,
+    "domain": "swebench-verified",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 22,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0005"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.4703393,
+    "domain": "swebench-verified",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 92,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0006"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.4704367,
+    "domain": "swebench-verified",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 94,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0007"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.45851773,
+    "domain": "swebench-verified",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 6,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": false,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0008"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47080682,
+    "domain": "swebench-verified",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 102,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0009"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46793562,
+    "domain": "swebench-verified",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 54,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0010"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47013807,
+    "domain": "swebench-verified",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 88,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0011"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46883859,
+    "domain": "swebench-verified",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 66,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0012"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.45851773,
+    "domain": "swebench-verified",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 6,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": false,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0013"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46394932,
+    "domain": "swebench-verified",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 22,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0014"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47062549,
+    "domain": "swebench-verified",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 98,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0015"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46468213,
+    "domain": "swebench-verified",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 26,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0016"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.4704367,
+    "domain": "swebench-verified",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 94,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0017"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47391395,
+    "domain": "swebench-verified",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 202,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0018"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46659198,
+    "domain": "swebench-verified",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 40,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0019"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46307636,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 18,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0000"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47377651,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 196,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0001"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46701772,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 44,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0002"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46855693,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 62,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0003"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46199658,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 14,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0004"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46468213,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 26,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0005"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46721661,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 46,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0006"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46740722,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 48,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0007"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46058038,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 10,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0008"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46307636,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 18,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0009"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47382279,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 198,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0010"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46500876,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 28,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0011"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46058038,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 10,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0012"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46531363,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 30,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0013"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46256826,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 16,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0014"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46947519,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 76,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0015"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46394932,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 22,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0016"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.4682568,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 58,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0017"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.85091927,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0018"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46199658,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 14,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0019"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46680979,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 42,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0000"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46776617,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 52,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0001"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46923106,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 72,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0002"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46199658,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 14,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0003"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46500876,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 28,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0004"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46636328,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 38,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0005"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46935475,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 74,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0006"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46809903,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 56,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0007"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46433038,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 24,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0008"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46468213,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 26,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0009"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46740722,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 48,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0010"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46959255,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 78,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0011"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.85091927,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0012"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46840932,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 60,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0013"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46353363,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 20,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0014"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46586847,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 34,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0015"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46256826,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 16,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0016"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46740722,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 48,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0017"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47323407,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 174,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0018"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46468213,
+    "domain": "swebench-verified",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 26,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0019"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46468213,
+    "domain": "swebench-verified",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 26,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0000"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46612256,
+    "domain": "swebench-verified",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 36,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0001"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47023979,
+    "domain": "swebench-verified",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 90,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0002"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46531363,
+    "domain": "swebench-verified",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 30,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0003"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46199658,
+    "domain": "swebench-verified",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 14,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0004"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46981861,
+    "domain": "swebench-verified",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 82,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0005"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47312816,
+    "domain": "swebench-verified",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 170,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0006"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47391395,
+    "domain": "swebench-verified",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 202,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0007"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46433038,
+    "domain": "swebench-verified",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 24,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0008"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46531363,
+    "domain": "swebench-verified",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 30,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0009"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47343883,
+    "domain": "swebench-verified",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 182,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0010"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47161928,
+    "domain": "swebench-verified",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 122,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0011"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46759021,
+    "domain": "swebench-verified",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 50,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0012"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47290871,
+    "domain": "swebench-verified",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 162,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0013"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46468213,
+    "domain": "swebench-verified",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 26,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0014"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46353363,
+    "domain": "swebench-verified",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 20,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0015"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46680979,
+    "domain": "swebench-verified",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 42,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0016"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46701772,
+    "domain": "swebench-verified",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 44,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0017"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47391395,
+    "domain": "swebench-verified",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 202,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0018"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46256826,
+    "domain": "swebench-verified",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 16,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0019"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46897319,
+    "domain": "swebench-verified",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 68,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0000"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.45698314,
+    "domain": "swebench-verified",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 4,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": false,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0001"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47217926,
+    "domain": "swebench-verified",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 138,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0002"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46134309,
+    "domain": "swebench-verified",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 12,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0003"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.45698314,
+    "domain": "swebench-verified",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 4,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": false,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0004"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46855693,
+    "domain": "swebench-verified",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 62,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0005"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.4703393,
+    "domain": "swebench-verified",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 92,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0006"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46199658,
+    "domain": "swebench-verified",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 14,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0007"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46307636,
+    "domain": "swebench-verified",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 18,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0008"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46759021,
+    "domain": "swebench-verified",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 50,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0009"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.4704367,
+    "domain": "swebench-verified",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 94,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0010"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46910394,
+    "domain": "swebench-verified",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 70,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0011"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.45698314,
+    "domain": "swebench-verified",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 4,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": false,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0012"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.45698314,
+    "domain": "swebench-verified",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 4,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": false,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0013"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46394932,
+    "domain": "swebench-verified",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 22,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0014"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.45698314,
+    "domain": "swebench-verified",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 4,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": false,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0015"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46793562,
+    "domain": "swebench-verified",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 54,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0016"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46910394,
+    "domain": "swebench-verified",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 70,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0017"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.45698314,
+    "domain": "swebench-verified",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 4,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": false,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0018"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46433038,
+    "domain": "swebench-verified",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 24,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0019"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46612256,
+    "domain": "swebench-verified",
+    "model": "gpt-5-nano",
+    "observable_has_output": true,
+    "observable_num_steps": 36,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0000"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46680979,
+    "domain": "swebench-verified",
+    "model": "gpt-5-nano",
+    "observable_has_output": true,
+    "observable_num_steps": 42,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0001"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.85091927,
+    "domain": "swebench-verified",
+    "model": "gpt-5-nano",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0002"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.85091927,
+    "domain": "swebench-verified",
+    "model": "gpt-5-nano",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0003"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.85091927,
+    "domain": "swebench-verified",
+    "model": "gpt-5-nano",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0004"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.85091927,
+    "domain": "swebench-verified",
+    "model": "gpt-5-nano",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0005"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47391395,
+    "domain": "swebench-verified",
+    "model": "gpt-5-nano",
+    "observable_has_output": true,
+    "observable_num_steps": 202,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0006"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.85091927,
+    "domain": "swebench-verified",
+    "model": "gpt-5-nano",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0007"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46433038,
+    "domain": "swebench-verified",
+    "model": "gpt-5-nano",
+    "observable_has_output": true,
+    "observable_num_steps": 24,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0008"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.85091927,
+    "domain": "swebench-verified",
+    "model": "gpt-5-nano",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0009"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.85091927,
+    "domain": "swebench-verified",
+    "model": "gpt-5-nano",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0010"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.85091927,
+    "domain": "swebench-verified",
+    "model": "gpt-5-nano",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0011"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.85091927,
+    "domain": "swebench-verified",
+    "model": "gpt-5-nano",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0012"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47391395,
+    "domain": "swebench-verified",
+    "model": "gpt-5-nano",
+    "observable_has_output": true,
+    "observable_num_steps": 202,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0013"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47183737,
+    "domain": "swebench-verified",
+    "model": "gpt-5-nano",
+    "observable_has_output": true,
+    "observable_num_steps": 128,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0014"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.85091927,
+    "domain": "swebench-verified",
+    "model": "gpt-5-nano",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0015"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.85091927,
+    "domain": "swebench-verified",
+    "model": "gpt-5-nano",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0016"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47071705,
+    "domain": "swebench-verified",
+    "model": "gpt-5-nano",
+    "observable_has_output": true,
+    "observable_num_steps": 100,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0017"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47391395,
+    "domain": "swebench-verified",
+    "model": "gpt-5-nano",
+    "observable_has_output": true,
+    "observable_num_steps": 202,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0018"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.85091927,
+    "domain": "swebench-verified",
+    "model": "gpt-5-nano",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0019"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.48868775,
+    "domain": "terminalbench",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 26,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0000"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.43646415,
+    "domain": "terminalbench",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 58,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0001"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.41725672,
+    "domain": "terminalbench",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 78,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0002"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.45749439,
+    "domain": "terminalbench",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 42,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0003"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.43874712,
+    "domain": "terminalbench",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 56,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0004"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.89648423,
+    "domain": "terminalbench",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0005"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.45749439,
+    "domain": "terminalbench",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 42,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0006"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47521166,
+    "domain": "terminalbench",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 32,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0007"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.89648423,
+    "domain": "terminalbench",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0008"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.45156248,
+    "domain": "terminalbench",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 46,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0009"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.41893482,
+    "domain": "terminalbench",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 76,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0010"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.43425984,
+    "domain": "terminalbench",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 60,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0011"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.43874712,
+    "domain": "terminalbench",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 56,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0012"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.43646415,
+    "domain": "terminalbench",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 58,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0013"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.89648423,
+    "domain": "terminalbench",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0014"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.89648423,
+    "domain": "terminalbench",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0015"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.43425984,
+    "domain": "terminalbench",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 60,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0016"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.44111438,
+    "domain": "terminalbench",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 54,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0017"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.42065904,
+    "domain": "terminalbench",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 74,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0018"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46401974,
+    "domain": "terminalbench",
+    "model": "claude-sonnet-4-20250514",
+    "observable_has_output": true,
+    "observable_num_steps": 38,
+    "provider": "anthropic",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0019"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47126617,
+    "domain": "terminalbench",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 34,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0000"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.51231377,
+    "domain": "terminalbench",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 18,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0001"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.53776374,
+    "domain": "terminalbench",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 12,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0002"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47940728,
+    "domain": "terminalbench",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 30,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0003"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.36287001,
+    "domain": "terminalbench",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 184,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0004"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.48868775,
+    "domain": "terminalbench",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 26,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0005"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.50558572,
+    "domain": "terminalbench",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 20,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0006"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.35711578,
+    "domain": "terminalbench",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 202,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0007"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.89648423,
+    "domain": "terminalbench",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0008"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.51978551,
+    "domain": "terminalbench",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 16,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0009"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47521166,
+    "domain": "terminalbench",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 32,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0010"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.51978551,
+    "domain": "terminalbench",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 16,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0011"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.52818279,
+    "domain": "terminalbench",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 14,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0012"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.483886,
+    "domain": "terminalbench",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 28,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0013"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.89648423,
+    "domain": "terminalbench",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0014"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.89648423,
+    "domain": "terminalbench",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0015"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47521166,
+    "domain": "terminalbench",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 32,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0016"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.49386152,
+    "domain": "terminalbench",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 24,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0017"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.53776374,
+    "domain": "terminalbench",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 12,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0018"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.51231377,
+    "domain": "terminalbench",
+    "model": "gemini-2.0-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 18,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0019"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46067577,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 40,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0000"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.42613453,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 68,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0001"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.32645815,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 336,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0002"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.44612743,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 50,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0003"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.32240235,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 360,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0004"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.43646415,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 58,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0005"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.49386152,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 24,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0006"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.49386152,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 24,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0007"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.89648423,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0008"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.43646415,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 58,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0009"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46067577,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 40,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0010"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.45156248,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 46,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0011"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47521166,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 32,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0012"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.42065904,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 74,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0013"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.89648423,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0014"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.89648423,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0015"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.44612743,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 50,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0016"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.35772746,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 200,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0017"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.43646415,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 58,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0018"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.48868775,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-flash",
+    "observable_has_output": true,
+    "observable_num_steps": 26,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0019"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.52818279,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 14,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0000"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46401974,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 38,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0001"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.44111438,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 54,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0002"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.41247677,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 84,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0003"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.45749439,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 42,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0004"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.43425984,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 60,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0005"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.51978551,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 16,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0006"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.50558572,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 20,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0007"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.89648423,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0008"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47521166,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 32,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0009"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47940728,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 30,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0010"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47521166,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 32,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0011"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47940728,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 30,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0012"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.44111438,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 54,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0013"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.89648423,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0014"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.89648423,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0015"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47521166,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 32,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0016"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.50558572,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 20,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0017"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46067577,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 40,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0018"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.51978551,
+    "domain": "terminalbench",
+    "model": "gemini-2.5-pro",
+    "observable_has_output": true,
+    "observable_num_steps": 16,
+    "provider": "gemini",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0019"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.52818279,
+    "domain": "terminalbench",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 14,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0000"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.49946838,
+    "domain": "terminalbench",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 22,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0001"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46754328,
+    "domain": "terminalbench",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 36,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0002"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.50558572,
+    "domain": "terminalbench",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 20,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0003"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.51978551,
+    "domain": "terminalbench",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 16,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0004"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47940728,
+    "domain": "terminalbench",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 30,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0005"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.50558572,
+    "domain": "terminalbench",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 20,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0006"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46754328,
+    "domain": "terminalbench",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 36,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0007"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46401974,
+    "domain": "terminalbench",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 38,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0008"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.44111438,
+    "domain": "terminalbench",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 54,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0009"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.51978551,
+    "domain": "terminalbench",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 16,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0010"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.483886,
+    "domain": "terminalbench",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 28,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0011"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.42065904,
+    "domain": "terminalbench",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 74,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0012"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.50558572,
+    "domain": "terminalbench",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 20,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0013"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46067577,
+    "domain": "terminalbench",
+    "model": "gpt-5",
+    "observable_has_output": true,
+    "observable_num_steps": 40,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0014"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.89648423,
+    "domain": "terminalbench",
+    "model": "gpt-5",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0015"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.89648423,
+    "domain": "terminalbench",
+    "model": "gpt-5",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0016"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.89648423,
+    "domain": "terminalbench",
+    "model": "gpt-5",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0017"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.89648423,
+    "domain": "terminalbench",
+    "model": "gpt-5",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0018"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.89648423,
+    "domain": "terminalbench",
+    "model": "gpt-5",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0019"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.54891274,
+    "domain": "terminalbench",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 10,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0000"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.51978551,
+    "domain": "terminalbench",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 16,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0001"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.53776374,
+    "domain": "terminalbench",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 12,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0002"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.49386152,
+    "domain": "terminalbench",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 24,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0003"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.53776374,
+    "domain": "terminalbench",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 12,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0004"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.45446089,
+    "domain": "terminalbench",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 44,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0005"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.48868775,
+    "domain": "terminalbench",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 26,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0006"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.45156248,
+    "domain": "terminalbench",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 46,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0007"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.50558572,
+    "domain": "terminalbench",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 20,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0008"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.39636546,
+    "domain": "terminalbench",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 108,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0009"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.51978551,
+    "domain": "terminalbench",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 16,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0010"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.49946838,
+    "domain": "terminalbench",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 22,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0011"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.44612743,
+    "domain": "terminalbench",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 50,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0012"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.51978551,
+    "domain": "terminalbench",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 16,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0013"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.53776374,
+    "domain": "terminalbench",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 12,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0014"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.48868775,
+    "domain": "terminalbench",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 26,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0015"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.49946838,
+    "domain": "terminalbench",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 22,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0016"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.89648423,
+    "domain": "terminalbench",
+    "model": "gpt-5-mini",
+    "observable_has_output": false,
+    "observable_num_steps": 0,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": true,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": true,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0017"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.52818279,
+    "domain": "terminalbench",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 14,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0018"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.51231377,
+    "domain": "terminalbench",
+    "model": "gpt-5-mini",
+    "observable_has_output": true,
+    "observable_num_steps": 18,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0019"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.49386152,
+    "domain": "terminalbench",
+    "model": "gpt-5-nano",
+    "observable_has_output": true,
+    "observable_num_steps": 24,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0000"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.50558572,
+    "domain": "terminalbench",
+    "model": "gpt-5-nano",
+    "observable_has_output": true,
+    "observable_num_steps": 20,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0001"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.51231377,
+    "domain": "terminalbench",
+    "model": "gpt-5-nano",
+    "observable_has_output": true,
+    "observable_num_steps": 18,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0002"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.49386152,
+    "domain": "terminalbench",
+    "model": "gpt-5-nano",
+    "observable_has_output": true,
+    "observable_num_steps": 24,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0003"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.44878796,
+    "domain": "terminalbench",
+    "model": "gpt-5-nano",
+    "observable_has_output": true,
+    "observable_num_steps": 48,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0004"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.35772746,
+    "domain": "terminalbench",
+    "model": "gpt-5-nano",
+    "observable_has_output": true,
+    "observable_num_steps": 200,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0005"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.46754328,
+    "domain": "terminalbench",
+    "model": "gpt-5-nano",
+    "observable_has_output": true,
+    "observable_num_steps": 36,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": true
+    },
+    "task_id": "0006"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47521166,
+    "domain": "terminalbench",
+    "model": "gpt-5-nano",
+    "observable_has_output": true,
+    "observable_num_steps": 32,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0007"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.57880195,
+    "domain": "terminalbench",
+    "model": "gpt-5-nano",
+    "observable_has_output": true,
+    "observable_num_steps": 6,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": false,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0008"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.40257481,
+    "domain": "terminalbench",
+    "model": "gpt-5-nano",
+    "observable_has_output": true,
+    "observable_num_steps": 98,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0009"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.42243189,
+    "domain": "terminalbench",
+    "model": "gpt-5-nano",
+    "observable_has_output": true,
+    "observable_num_steps": 72,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0010"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.39877414,
+    "domain": "terminalbench",
+    "model": "gpt-5-nano",
+    "observable_has_output": true,
+    "observable_num_steps": 104,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0011"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.52818279,
+    "domain": "terminalbench",
+    "model": "gpt-5-nano",
+    "observable_has_output": true,
+    "observable_num_steps": 14,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0012"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.49946838,
+    "domain": "terminalbench",
+    "model": "gpt-5-nano",
+    "observable_has_output": true,
+    "observable_num_steps": 22,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0013"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.54891274,
+    "domain": "terminalbench",
+    "model": "gpt-5-nano",
+    "observable_has_output": true,
+    "observable_num_steps": 10,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0014"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.45749439,
+    "domain": "terminalbench",
+    "model": "gpt-5-nano",
+    "observable_has_output": true,
+    "observable_num_steps": 42,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0015"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.51231377,
+    "domain": "terminalbench",
+    "model": "gpt-5-nano",
+    "observable_has_output": true,
+    "observable_num_steps": 18,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": true,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0016"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.44357217,
+    "domain": "terminalbench",
+    "model": "gpt-5-nano",
+    "observable_has_output": true,
+    "observable_num_steps": 52,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0017"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.47940728,
+    "domain": "terminalbench",
+    "model": "gpt-5-nano",
+    "observable_has_output": true,
+    "observable_num_steps": 30,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": false,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0018"
+  },
+  {
+    "blind_triggers_only_without_target_or_alt_gold": true,
+    "cross_domain_risk_without_target_outcome": 0.54891274,
+    "domain": "terminalbench",
+    "model": "gpt-5-nano",
+    "observable_has_output": true,
+    "observable_num_steps": 10,
+    "provider": "openai",
+    "selected_by": {
+      "all": true,
+      "cross_benchmark_failure_risk_budget_20pct": true,
+      "hash_budget_20pct": false,
+      "never": false,
+      "no_output": false,
+      "no_output_or_at_least_8_steps": true,
+      "no_output_or_at_most_2_steps": false,
+      "no_output_then_hash_budget_20pct": false
+    },
+    "task_id": "0019"
+  }
+]
