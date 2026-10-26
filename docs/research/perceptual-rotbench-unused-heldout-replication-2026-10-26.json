@@ -1,0 +1,7430 @@
+{
+  "counts": {
+    "any_pixel": {
+      "FN": 0,
+      "FP": 0,
+      "TN": 120,
+      "TP": 118,
+      "abstain": 2
+    },
+    "global": {
+      "FN": 103,
+      "FP": 0,
+      "TN": 120,
+      "TP": 15,
+      "abstain": 2
+    },
+    "localized": {
+      "FN": 16,
+      "FP": 0,
+      "TN": 120,
+      "TP": 102,
+      "abstain": 2
+    }
+  },
+  "date": "2026-10-26",
+  "errors": {
+    "abstain_original_labels_by_type": {
+      "layout-clip": 1,
+      "layout-overlap": 1
+    },
+    "app_group_bootstrap": {
+      "cluster_bootstrap_recall_difference_pr_le_zero": 0.0,
+      "draws": 6000,
+      "localized_minus_global_recall_app_cluster_bootstrap95": [
+        0.6574,
+        0.8039
+      ],
+      "localized_recall_app_cluster_bootstrap95": [
+        0.8037,
+        0.9326
+      ],
+      "observed_FPR_bootstrap95_on_identical_controls_ONLY": [
+        0.0,
+        0.0
+      ],
+      "sample_distinct_apps": 54,
+      "seed": 20261026,
+      "unit": "APP, cases within app sampled together, not independent individual screenshots"
+    },
+    "cases_abstained": 2,
+    "global_only_positive_cases": 0,
+    "localized_only_positive_cases": 87,
+    "no_missing_source_filled_with_guessed_media": true,
+    "unavailable_pinned_source_files_count": 4,
+    "unavailable_pinned_source_paths": [
+      "image/right/com.fsck.k9/app.k9mail.feature.widget.unread.UnreadWidgetChooseAccountActivity_landscape.png",
+      "image/right/com.fsck.k9/app.k9mail.feature.widget.unread.UnreadWidgetChooseAccountActivity_portrait.png",
+      "image/right/network.loki.messenger.fdroid/org.thoughtcrime.securesms.PassphrasePromptActivity_landscape.png",
+      "image/right/network.loki.messenger.fdroid/org.thoughtcrime.securesms.PassphrasePromptActivity_portrait.png"
+    ]
+  },
+  "frozen_receipts": {
+    "design.json": "bec1a8f83663abcdda118d7e16839b623b38bc5ce2e72857fe9630ce3cd71382",
+    "evaluated.json": "c86949d91b069a54ef3ddd66fa4b39024d2900e0b371b42d1a7db2d2b403a69c",
+    "predictions.json": "0414fb609ab5decba2f1a114dcb67eacba1f55ee9ca61dd647e8fc5cdc1bb7db",
+    "selection.json": "0cba9ddc3d40dfb1c997bdcbe6de7a46bb1adf8364fd11823e916a57f2870b96"
+  },
+  "groups": {
+    "direction-mismatch": {
+      "cases": 34,
+      "global": {
+        "FN": 23,
+        "FP": 0,
+        "TN": 0,
+        "TP": 11,
+        "abstain": 0
+      },
+      "localized": {
+        "FN": 2,
+        "FP": 0,
+        "TN": 0,
+        "TP": 32,
+        "abstain": 0
+      },
+      "positive": 34
+    },
+    "layout-clip": {
+      "cases": 9,
+      "global": {
+        "FN": 8,
+        "FP": 0,
+        "TN": 0,
+        "TP": 0,
+        "abstain": 1
+      },
+      "localized": {
+        "FN": 4,
+        "FP": 0,
+        "TN": 0,
+        "TP": 4,
+        "abstain": 1
+      },
+      "positive": 9
+    },
+    "layout-miss": {
+      "cases": 34,
+      "global": {
+        "FN": 32,
+        "FP": 0,
+        "TN": 0,
+        "TP": 2,
+        "abstain": 0
+      },
+      "localized": {
+        "FN": 9,
+        "FP": 0,
+        "TN": 0,
+        "TP": 25,
+        "abstain": 0
+      },
+      "positive": 34
+    },
+    "layout-overlap": {
+      "cases": 9,
+      "global": {
+        "FN": 7,
+        "FP": 0,
+        "TN": 0,
+        "TP": 1,
+        "abstain": 1
+      },
+      "localized": {
+        "FN": 1,
+        "FP": 0,
+        "TN": 0,
+        "TP": 7,
+        "abstain": 1
+      },
+      "positive": 9
+    },
+    "right": {
+      "cases": 120,
+      "global": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 120,
+        "TP": 0,
+        "abstain": 0
+      },
+      "localized": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 120,
+        "TP": 0,
+        "abstain": 0
+      },
+      "positive": 0
+    },
+    "state-loseinput": {
+      "cases": 34,
+      "global": {
+        "FN": 33,
+        "FP": 0,
+        "TN": 0,
+        "TP": 1,
+        "abstain": 0
+      },
+      "localized": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 0,
+        "TP": 34,
+        "abstain": 0
+      },
+      "positive": 34
+    }
+  },
+  "limitations": [
+    "Retained unused subset is disjoint by record id but original source app identities overlap with prior first round. Thresholds were fixed by prior round, not tuned to these gold labels.",
+    "Author right controls are byte-identical to source-approved screenshot in same viewport, not naturally changed app states.",
+    "Real clean portrait and landscape screenshots intentionally have different layouts; forced wrong-state comparison demonstrates source version/input mismatch, not an acceptable detector.",
+    "Opposite viewport correct gate must abstain; app semantics under a different viewport require its own approved reference.",
+    "Synthetic bug annotations are not an independent human evaluation of real-world objectionability or precise region quality.",
+    "No human-gold natural video temporal faults or real owner final render quality scores, and live SWAAG integration remains unverified."
+  ],
+  "negative_control": {
+    "exact_approved_reference_bytes": 120,
+    "real_author_clean_right_cases": 120,
+    "wrong_viewport_control_does_not_match_state": "portrait->landscape originals of same activity are author approved but should not be matched to wrong viewport. Forced resize comparator deliberately violates contract, NOT a legitimate correctly bound false positive.",
+    "wrong_viewport_forced_abstain": 0,
+    "wrong_viewport_forced_bad_flags_on_author_clean": 120,
+    "wrong_viewport_source_binding_ABSTAINS_on_author_clean": 120
+  },
+  "original_gold_status": "Author release labels distinguish originally right screens from seeded mutants; NOT independent human acceptance ratings; no pixel-level blame regions/visible severity ground truth, no actual owner output independent gold.",
+  "original_source": "https://huggingface.co/datasets/ImDim/RotBench",
+  "per_case": [
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "com.mrsep.musicrecognizer",
+      "changed_fraction24_max": 0.0002309028,
+      "changed_fraction_any_max": 0.0006779514,
+      "external_author_bug": true,
+      "id": 0,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "org.strongswan.android",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 1,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "chat.delta.lite",
+      "changed_fraction24_max": 0.0039678819,
+      "changed_fraction_any_max": 0.0061875,
+      "external_author_bug": true,
+      "id": 2,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "com.byagowi.persiancalendar",
+      "changed_fraction24_max": 0.0001623264,
+      "changed_fraction_any_max": 0.0056223958,
+      "external_author_bug": true,
+      "id": 3,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "cz.vitskalicky.lepsirozvrh",
+      "changed_fraction24_max": 0.0022734375,
+      "changed_fraction_any_max": 0.0054114583,
+      "external_author_bug": true,
+      "id": 4,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-overlap"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "cz.vitskalicky.lepsirozvrh",
+      "changed_fraction24_max": 0.0056762153,
+      "changed_fraction_any_max": 0.0081128472,
+      "external_author_bug": true,
+      "id": 5,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.encrypt.bwt",
+      "changed_fraction24_max": 0.0012578125,
+      "changed_fraction_any_max": 0.0019765625,
+      "external_author_bug": true,
+      "id": 6,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.fsck.k9",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 7,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0008046875,
+      "changed_fraction_any_max": 0.0018029514,
+      "external_author_bug": true,
+      "id": 9,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "com.philkes.notallyx",
+      "changed_fraction24_max": 0.0015086806,
+      "changed_fraction_any_max": 0.0029123264,
+      "external_author_bug": true,
+      "id": 10,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "de.nulide.findmydevice",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 11,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "cz.vitskalicky.lepsirozvrh",
+      "changed_fraction24_max": 0.0016822917,
+      "changed_fraction_any_max": 0.0040763889,
+      "external_author_bug": true,
+      "id": 12,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "org.tasks",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 13,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "org.androidlabs.applistbackup",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 14,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "io.pslab",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 15,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "org.strongswan.android",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 16,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "net.turtton.ytalarm",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 17,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.encrypt.bwt",
+      "changed_fraction24_max": 0.0185703125,
+      "changed_fraction_any_max": 0.0216692708,
+      "external_author_bug": true,
+      "id": 19,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "net.alexbarry.calc_android",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 20,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "dev.octoshrimpy.quik",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 21,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "com.databag",
+      "changed_fraction24_max": 0.0019401042,
+      "changed_fraction_any_max": 0.0038003472,
+      "external_author_bug": true,
+      "id": 23,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.feko.generictabletoprpg",
+      "changed_fraction24_max": 0.0016362847,
+      "changed_fraction_any_max": 0.0058741319,
+      "external_author_bug": true,
+      "id": 24,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "chat.delta.lite",
+      "changed_fraction24_max": 0.0038932292,
+      "changed_fraction_any_max": 0.0061970486,
+      "external_author_bug": true,
+      "id": 26,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 27,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.byagowi.persiancalendar",
+      "changed_fraction24_max": 0.0053880208,
+      "changed_fraction_any_max": 0.0139357639,
+      "external_author_bug": true,
+      "id": 28,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0031241319,
+      "changed_fraction_any_max": 0.0054184028,
+      "external_author_bug": true,
+      "id": 29,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "org.tasks",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 31,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "de.astubenbord.paperless_mobile",
+      "changed_fraction24_max": 0.0232057292,
+      "changed_fraction_any_max": 0.0322881944,
+      "external_author_bug": true,
+      "id": 32,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "org.tasks",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 33,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "dev.linwood.flow.nightly",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 36,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "org.codeberg.quecomet.oshi",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 38,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "cz.vitskalicky.lepsirozvrh",
+      "changed_fraction24_max": 0.003421875,
+      "changed_fraction_any_max": 0.0071909722,
+      "external_author_bug": true,
+      "id": 39,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "org.tasks",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 41,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0008272569,
+      "changed_fraction_any_max": 0.00175,
+      "external_author_bug": true,
+      "id": 42,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.byagowi.persiancalendar",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 44,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.albertobonacina.wassword",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 45,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "de.jepfa.personaltasklogger",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 46,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "de.kromke.andreas.safmediascanner",
+      "changed_fraction24_max": 0.0007447917,
+      "changed_fraction_any_max": 0.0014157986,
+      "external_author_bug": true,
+      "id": 47,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.fsck.k9",
+      "changed_fraction24_max": 2.51736e-05,
+      "changed_fraction_any_max": 0.0001744792,
+      "external_author_bug": true,
+      "id": 48,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "net.curiana.recipes",
+      "changed_fraction24_max": 0.0023880208,
+      "changed_fraction_any_max": 0.0037413194,
+      "external_author_bug": true,
+      "id": 50,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.philkes.notallyx",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 51,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0006883681,
+      "changed_fraction_any_max": 0.0012413194,
+      "external_author_bug": true,
+      "id": 52,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.philkes.notallyx",
+      "changed_fraction24_max": 0.0008342014,
+      "changed_fraction_any_max": 0.0016510417,
+      "external_author_bug": true,
+      "id": 53,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0003350694,
+      "external_author_bug": true,
+      "id": 59,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 61,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0008194444,
+      "changed_fraction_any_max": 0.0023454861,
+      "external_author_bug": true,
+      "id": 62,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "chat.delta.lite",
+      "changed_fraction24_max": 0.0014609375,
+      "changed_fraction_any_max": 0.0025859375,
+      "external_author_bug": true,
+      "id": 63,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "com.byagowi.persiancalendar",
+      "changed_fraction24_max": 0.0013159722,
+      "changed_fraction_any_max": 0.0051085069,
+      "external_author_bug": true,
+      "id": 64,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "cz.vitskalicky.lepsirozvrh",
+      "changed_fraction24_max": 0.0056510417,
+      "changed_fraction_any_max": 0.0091875,
+      "external_author_bug": true,
+      "id": 67,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 68,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "cz.vitskalicky.lepsirozvrh",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 70,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0009921875,
+      "changed_fraction_any_max": 0.0022534722,
+      "external_author_bug": true,
+      "id": 72,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.adilhanney.saber",
+      "changed_fraction24_max": 0.0002751736,
+      "changed_fraction_any_max": 0.0008116319,
+      "external_author_bug": true,
+      "id": 73,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.philkes.notallyx",
+      "changed_fraction24_max": 0.0078602431,
+      "changed_fraction_any_max": 0.0090199653,
+      "external_author_bug": true,
+      "id": 74,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.sesu8642.infusion_timer",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 76,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 77,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.android.geto",
+      "changed_fraction24_max": 0.0013871528,
+      "changed_fraction_any_max": 0.0027178819,
+      "external_author_bug": true,
+      "id": 80,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "de.kitshn.android",
+      "changed_fraction24_max": 0.0057907986,
+      "changed_fraction_any_max": 0.0111493056,
+      "external_author_bug": true,
+      "id": 81,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "dev.theolm.wwc",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 82,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.hegocre.nextcloudpasswords",
+      "changed_fraction24_max": 0.0024722222,
+      "changed_fraction_any_max": 0.0050720486,
+      "external_author_bug": true,
+      "id": 83,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "org.outline.android.client",
+      "changed_fraction24_max": 0.1124635417,
+      "changed_fraction_any_max": 0.2906657986,
+      "external_author_bug": true,
+      "id": 86,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "ru.tech.imageresizershrinker",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 87,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "org.pacien.tincapp",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 88,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "org.tasks",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 89,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "org.tasks",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 90,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0004227431,
+      "changed_fraction_any_max": 0.0016796875,
+      "external_author_bug": true,
+      "id": 91,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "dev.octoshrimpy.quik",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 93,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "org.tasks",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 94,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "com.encrypt.bwt",
+      "changed_fraction24_max": 0.0012083333,
+      "changed_fraction_any_max": 0.0019696181,
+      "external_author_bug": true,
+      "id": 95,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "org.samo_lego.canta",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 96,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "org.tasks",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 98,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "dev.linwood.flow.nightly",
+      "changed_fraction24_max": 0.0096779514,
+      "changed_fraction_any_max": 0.0204270833,
+      "external_author_bug": true,
+      "id": 100,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "com.philkes.notallyx",
+      "changed_fraction24_max": 0.0011475694,
+      "changed_fraction_any_max": 0.0022569444,
+      "external_author_bug": true,
+      "id": 101,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.encrypt.bwt",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 103,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "org.strongswan.android",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 105,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "me.echeung.moemoekyun.fdroid",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 106,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "chat.delta.lite",
+      "changed_fraction24_max": 0.1564435764,
+      "changed_fraction_any_max": 0.194765625,
+      "external_author_bug": true,
+      "id": 107,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "de.nulide.findmydevice",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 108,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "net.turtton.ytalarm",
+      "changed_fraction24_max": 0.0033098958,
+      "changed_fraction_any_max": 0.0091684028,
+      "external_author_bug": true,
+      "id": 109,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-clip"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "org.smc.inputmethod.indic",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 110,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0006770833,
+      "changed_fraction_any_max": 0.0013289931,
+      "external_author_bug": true,
+      "id": 111,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "org.strongswan.android",
+      "changed_fraction24_max": 0.0031076389,
+      "changed_fraction_any_max": 0.0057682292,
+      "external_author_bug": true,
+      "id": 112,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "io.pslab",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 114,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.philkes.notallyx",
+      "changed_fraction24_max": 0.0014418403,
+      "changed_fraction_any_max": 0.0027638889,
+      "external_author_bug": true,
+      "id": 115,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.fsck.k9",
+      "changed_fraction24_max": 0.000609375,
+      "changed_fraction_any_max": 0.0012838542,
+      "external_author_bug": true,
+      "id": 116,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "org.androidlabs.applistbackup",
+      "changed_fraction24_max": 0.0010998264,
+      "changed_fraction_any_max": 0.002859375,
+      "external_author_bug": true,
+      "id": 117,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-overlap"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "chat.delta.lite",
+      "changed_fraction24_max": 0.0369626736,
+      "changed_fraction_any_max": 0.0767578125,
+      "external_author_bug": true,
+      "id": 119,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "de.nulide.findmydevice",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 121,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        false
+      ],
+      "app": "com.fsck.k9",
+      "changed_fraction24_max": null,
+      "changed_fraction_any_max": null,
+      "external_author_bug": true,
+      "id": 122,
+      "predictions": {
+        "aligned": {
+          "any_pixel": null,
+          "global": null,
+          "localized": null
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": null,
+          "global": null,
+          "localized": null
+        }
+      },
+      "type": "layout-overlap"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "ru.tech.imageresizershrinker",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 123,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "cz.vitskalicky.lepsirozvrh",
+      "changed_fraction24_max": 0.0156553819,
+      "changed_fraction_any_max": 0.0166710069,
+      "external_author_bug": true,
+      "id": 124,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "chat.delta.lite",
+      "changed_fraction24_max": 0.0024609375,
+      "changed_fraction_any_max": 0.0039748264,
+      "external_author_bug": true,
+      "id": 127,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.osfans.trime",
+      "changed_fraction24_max": 0.00225,
+      "changed_fraction_any_max": 0.0036449653,
+      "external_author_bug": true,
+      "id": 128,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "chat.delta.lite",
+      "changed_fraction24_max": 0.01021875,
+      "changed_fraction_any_max": 0.0271979167,
+      "external_author_bug": true,
+      "id": 129,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "org.outline.android.client",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 130,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.android.geto",
+      "changed_fraction24_max": 0.0007612847,
+      "changed_fraction_any_max": 0.0019548611,
+      "external_author_bug": true,
+      "id": 131,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.mrsep.musicrecognizer",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 132,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "org.torproject.torservices",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 133,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.mrsep.musicrecognizer",
+      "changed_fraction24_max": 0.0029166667,
+      "changed_fraction_any_max": 0.0059157986,
+      "external_author_bug": true,
+      "id": 134,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "uk.me.amugofjava.anytime",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 135,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.encrypt.bwt",
+      "changed_fraction24_max": 0.0012430556,
+      "changed_fraction_any_max": 0.0019618056,
+      "external_author_bug": true,
+      "id": 138,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 139,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "org.tasks",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 141,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "dev.octoshrimpy.quik",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 142,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "me.echeung.moemoekyun.fdroid",
+      "changed_fraction24_max": 0.0004019097,
+      "changed_fraction_any_max": 0.0010364583,
+      "external_author_bug": true,
+      "id": 144,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0005260417,
+      "changed_fraction_any_max": 0.0009348958,
+      "external_author_bug": true,
+      "id": 145,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.philkes.notallyx",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 146,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "com.mrsep.musicrecognizer",
+      "changed_fraction24_max": 0.0037743056,
+      "changed_fraction_any_max": 0.0074861111,
+      "external_author_bug": true,
+      "id": 147,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "dev.octoshrimpy.quik",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 148,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "org.tasks",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 149,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "de.kitshn.android",
+      "changed_fraction24_max": 0.0038836806,
+      "changed_fraction_any_max": 0.0132560764,
+      "external_author_bug": true,
+      "id": 150,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-clip"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "org.androidlabs.applistbackup",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 151,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "de.nulide.findmydevice",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 152,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "dev.octoshrimpy.quik",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 153,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "com.philkes.notallyx",
+      "changed_fraction24_max": 0.0020286458,
+      "changed_fraction_any_max": 0.0042092014,
+      "external_author_bug": true,
+      "id": 154,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "chat.delta.lite",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 155,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.philkes.notallyx",
+      "changed_fraction24_max": 0.0011197917,
+      "changed_fraction_any_max": 0.0103619792,
+      "external_author_bug": true,
+      "id": 156,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.mrsep.musicrecognizer",
+      "changed_fraction24_max": 0.0004557292,
+      "changed_fraction_any_max": 0.0008949653,
+      "external_author_bug": true,
+      "id": 157,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-clip"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.philkes.notallyx",
+      "changed_fraction24_max": 0.002,
+      "changed_fraction_any_max": 0.0043845486,
+      "external_author_bug": true,
+      "id": 158,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 159,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "net.alexbarry.calc_android",
+      "changed_fraction24_max": 0.0028098958,
+      "changed_fraction_any_max": 0.0053602431,
+      "external_author_bug": true,
+      "id": 161,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0005946181,
+      "changed_fraction_any_max": 0.0011519097,
+      "external_author_bug": true,
+      "id": 162,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "org.stypox.dicio",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 164,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "de.kitshn.android",
+      "changed_fraction24_max": 0.0084817708,
+      "changed_fraction_any_max": 0.0158142361,
+      "external_author_bug": true,
+      "id": 166,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "ru.tech.imageresizershrinker",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 168,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "chat.delta.lite",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 170,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.fsck.k9",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 173,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.encrypt.bwt",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 174,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.swordfish.lemuroid",
+      "changed_fraction24_max": 0.0005763889,
+      "changed_fraction_any_max": 0.0012873264,
+      "external_author_bug": true,
+      "id": 175,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "org.pacien.tincapp",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 177,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "org.smc.inputmethod.indic",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 179,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0005598958,
+      "changed_fraction_any_max": 0.0010590278,
+      "external_author_bug": true,
+      "id": 181,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "io.pslab",
+      "changed_fraction24_max": 0.0039036458,
+      "changed_fraction_any_max": 0.0112204861,
+      "external_author_bug": true,
+      "id": 182,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.hegocre.nextcloudpasswords",
+      "changed_fraction24_max": 0.0009696181,
+      "changed_fraction_any_max": 0.0029756944,
+      "external_author_bug": true,
+      "id": 184,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 185,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.encrypt.bwt",
+      "changed_fraction24_max": 0.0003845486,
+      "changed_fraction_any_max": 0.0006276042,
+      "external_author_bug": true,
+      "id": 186,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-overlap"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "dev.octoshrimpy.quik",
+      "changed_fraction24_max": 0.0061657986,
+      "changed_fraction_any_max": 0.0170112847,
+      "external_author_bug": true,
+      "id": 187,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0012560764,
+      "changed_fraction_any_max": 0.0024409722,
+      "external_author_bug": true,
+      "id": 188,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-overlap"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.byagowi.persiancalendar",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 190,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "net.curiana.recipes",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 192,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "info.zverev.ilya.every_door",
+      "changed_fraction24_max": 0.000328125,
+      "changed_fraction_any_max": 0.0028550347,
+      "external_author_bug": true,
+      "id": 193,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-clip"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0014505208,
+      "changed_fraction_any_max": 0.0069991319,
+      "external_author_bug": true,
+      "id": 194,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 196,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "de.badaix.snapcast",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 197,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "org.tasks",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 198,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "com.fsck.k9",
+      "changed_fraction24_max": 0.0011467014,
+      "changed_fraction_any_max": 0.0030460069,
+      "external_author_bug": true,
+      "id": 199,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "com.encrypt.bwt",
+      "changed_fraction24_max": 0.0021102431,
+      "changed_fraction_any_max": 0.0045902778,
+      "external_author_bug": true,
+      "id": 200,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "org.petero.droidfish",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 202,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "io.github.pastthepixels.freepaint",
+      "changed_fraction24_max": 0.0004635417,
+      "changed_fraction_any_max": 0.000890625,
+      "external_author_bug": true,
+      "id": 204,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.fsck.k9",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 205,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.github.olga_yakovleva.rhvoice.android",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 206,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "pl.edu.pjwstk.s999844.shoppinglist",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 208,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 210,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "org.petero.droidfish",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 214,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "org.encointer.wallet",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 216,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "cz.vitskalicky.lepsirozvrh",
+      "changed_fraction24_max": 0.7756519097,
+      "changed_fraction_any_max": 0.8043420139,
+      "external_author_bug": true,
+      "id": 218,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0033993056,
+      "changed_fraction_any_max": 0.0059635417,
+      "external_author_bug": true,
+      "id": 219,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.hegocre.nextcloudpasswords",
+      "changed_fraction24_max": 0.0018793403,
+      "changed_fraction_any_max": 0.0048845486,
+      "external_author_bug": true,
+      "id": 221,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-overlap"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "io.pslab",
+      "changed_fraction24_max": 0.0008550347,
+      "changed_fraction_any_max": 0.0012595486,
+      "external_author_bug": true,
+      "id": 222,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.encrypt.bwt",
+      "changed_fraction24_max": 0.0024322917,
+      "changed_fraction_any_max": 0.0076215278,
+      "external_author_bug": true,
+      "id": 224,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 225,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "cz.vitskalicky.lepsirozvrh",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 227,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0005694444,
+      "changed_fraction_any_max": 0.0011875,
+      "external_author_bug": true,
+      "id": 228,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.encrypt.bwt",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 230,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.android.geto",
+      "changed_fraction24_max": 0.0003671875,
+      "changed_fraction_any_max": 0.0012543403,
+      "external_author_bug": true,
+      "id": 233,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-clip"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "chat.delta.lite",
+      "changed_fraction24_max": 0.0014305556,
+      "changed_fraction_any_max": 0.0025425347,
+      "external_author_bug": true,
+      "id": 235,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.illiouchine.jm",
+      "changed_fraction24_max": 0.0466241319,
+      "changed_fraction_any_max": 0.0780451389,
+      "external_author_bug": true,
+      "id": 237,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "de.nulide.findmydevice",
+      "changed_fraction24_max": 0.0056892361,
+      "changed_fraction_any_max": 0.0088489583,
+      "external_author_bug": true,
+      "id": 238,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 239,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0004809028,
+      "changed_fraction_any_max": 0.0007942708,
+      "external_author_bug": true,
+      "id": 240,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "org.torproject.torservices",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 241,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.github.olga_yakovleva.rhvoice.android",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 242,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "net.turtton.ytalarm",
+      "changed_fraction24_max": 0.0019453125,
+      "changed_fraction_any_max": 0.0073680556,
+      "external_author_bug": true,
+      "id": 243,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "de.kromke.andreas.safmediascanner",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 244,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "net.alexbarry.calc_android",
+      "changed_fraction24_max": 0.0002821181,
+      "changed_fraction_any_max": 0.0009149306,
+      "external_author_bug": true,
+      "id": 245,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.illiouchine.jm",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 248,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "net.turtton.ytalarm",
+      "changed_fraction24_max": 0.5756597222,
+      "changed_fraction_any_max": 0.7431927083,
+      "external_author_bug": true,
+      "id": 249,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0002977431,
+      "changed_fraction_any_max": 0.0005069444,
+      "external_author_bug": true,
+      "id": 252,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-clip"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "net.alexbarry.calc_android",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 254,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "dev.theolm.wwc",
+      "changed_fraction24_max": 0.0118854167,
+      "changed_fraction_any_max": 0.0301770833,
+      "external_author_bug": true,
+      "id": 255,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-overlap"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "de.astubenbord.paperless_mobile",
+      "changed_fraction24_max": 0.0013090278,
+      "changed_fraction_any_max": 0.0020182292,
+      "external_author_bug": true,
+      "id": 256,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "io.pslab",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 257,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "org.tasks",
+      "changed_fraction24_max": 0.0023628472,
+      "changed_fraction_any_max": 0.0040633681,
+      "external_author_bug": true,
+      "id": 258,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "com.android.geto",
+      "changed_fraction24_max": 0.0018585069,
+      "changed_fraction_any_max": 0.0037309028,
+      "external_author_bug": true,
+      "id": 260,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0005451389,
+      "changed_fraction_any_max": 0.0010859375,
+      "external_author_bug": true,
+      "id": 261,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "com.fsck.k9",
+      "changed_fraction24_max": 0.0007534722,
+      "changed_fraction_any_max": 0.0023845486,
+      "external_author_bug": true,
+      "id": 262,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "dev.maartje.hetsaldo",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 263,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "de.nulide.findmydevice",
+      "changed_fraction24_max": 0.0005859375,
+      "changed_fraction_any_max": 0.0011701389,
+      "external_author_bug": true,
+      "id": 266,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.6454583333,
+      "changed_fraction_any_max": 0.6662751736,
+      "external_author_bug": true,
+      "id": 267,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "dev.octoshrimpy.quik",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 270,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "com.albertobonacina.wassword",
+      "changed_fraction24_max": 0.6044192708,
+      "changed_fraction_any_max": 0.6613914931,
+      "external_author_bug": true,
+      "id": 272,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "com.byagowi.persiancalendar",
+      "changed_fraction24_max": 0.7060434028,
+      "changed_fraction_any_max": 0.8741527778,
+      "external_author_bug": true,
+      "id": 274,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        false
+      ],
+      "app": "network.loki.messenger.fdroid",
+      "changed_fraction24_max": null,
+      "changed_fraction_any_max": null,
+      "external_author_bug": true,
+      "id": 275,
+      "predictions": {
+        "aligned": {
+          "any_pixel": null,
+          "global": null,
+          "localized": null
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": null,
+          "global": null,
+          "localized": null
+        }
+      },
+      "type": "layout-clip"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.osfans.trime",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 277,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "com.mrsep.musicrecognizer",
+      "changed_fraction24_max": 0.0049071181,
+      "changed_fraction_any_max": 0.0124262153,
+      "external_author_bug": true,
+      "id": 278,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-overlap"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "io.pslab",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 280,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.mrsep.musicrecognizer",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 281,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 283,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "info.zverev.ilya.every_door",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 285,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "io.theoneapp",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 286,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 287,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.swordfish.lemuroid",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 288,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "pl.edu.pjwstk.s999844.shoppinglist",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 290,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "cz.vitskalicky.lepsirozvrh",
+      "changed_fraction24_max": 0.0056449653,
+      "changed_fraction_any_max": 0.0083559028,
+      "external_author_bug": true,
+      "id": 295,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "org.stypox.dicio",
+      "changed_fraction24_max": 0.0010538194,
+      "changed_fraction_any_max": 0.0023663194,
+      "external_author_bug": true,
+      "id": 296,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "dev.octoshrimpy.quik",
+      "changed_fraction24_max": 0.0024644097,
+      "changed_fraction_any_max": 0.0092873264,
+      "external_author_bug": true,
+      "id": 297,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-clip"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 299,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.hegocre.nextcloudpasswords",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 300,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0088420139,
+      "changed_fraction_any_max": 0.0116727431,
+      "external_author_bug": true,
+      "id": 301,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-overlap"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.encrypt.bwt",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 302,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "uk.me.amugofjava.anytime",
+      "changed_fraction24_max": 0.3963012153,
+      "changed_fraction_any_max": 0.4288246528,
+      "external_author_bug": true,
+      "id": 303,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "io.pslab",
+      "changed_fraction24_max": 0.0019071181,
+      "changed_fraction_any_max": 0.0035251736,
+      "external_author_bug": true,
+      "id": 304,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "de.kitshn.android",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 306,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "de.dbauer.expensetracker",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 307,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.encrypt.bwt",
+      "changed_fraction24_max": 0.0027916667,
+      "changed_fraction_any_max": 0.0056085069,
+      "external_author_bug": true,
+      "id": 308,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0004869792,
+      "changed_fraction_any_max": 0.001140625,
+      "external_author_bug": true,
+      "id": 310,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0006293403,
+      "changed_fraction_any_max": 0.0012309028,
+      "external_author_bug": true,
+      "id": 311,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.philkes.notallyx",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 312,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "chat.delta.lite",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 313,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "de.nulide.findmydevice",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 315,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.fsck.k9",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 316,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.github.dyhkwong.sagernet",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 317,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "org.stypox.dicio",
+      "changed_fraction24_max": 0.0086206597,
+      "changed_fraction_any_max": 0.0299036458,
+      "external_author_bug": true,
+      "id": 318,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "io.github.pastthepixels.freepaint",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 319,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.philkes.notallyx",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 320,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "chat.delta.lite",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 321,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "chat.delta.lite",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 322,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "dev.octoshrimpy.quik",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 325,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.databag",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 327,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.byagowi.persiancalendar",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 328,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "com.adilhanney.saber",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 329,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "org.smc.inputmethod.indic",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 330,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "dev.octoshrimpy.quik",
+      "changed_fraction24_max": 0.000703125,
+      "changed_fraction_any_max": 0.0019557292,
+      "external_author_bug": true,
+      "id": 331,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-clip"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "chat.delta.lite",
+      "changed_fraction24_max": 0.0005104167,
+      "changed_fraction_any_max": 0.0031475694,
+      "external_author_bug": true,
+      "id": 332,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "direction-mismatch"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "de.nulide.findmydevice",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 334,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "cz.vitskalicky.lepsirozvrh",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 335,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "dev.octoshrimpy.quik",
+      "changed_fraction24_max": 0.0067873264,
+      "changed_fraction_any_max": 0.0190069444,
+      "external_author_bug": true,
+      "id": 336,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        true
+      ],
+      "app": "de.astubenbord.paperless_mobile",
+      "changed_fraction24_max": 0.0,
+      "changed_fraction_any_max": 0.0,
+      "external_author_bug": false,
+      "id": 337,
+      "predictions": {
+        "aligned": {
+          "any_pixel": false,
+          "global": false,
+          "localized": false
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "right"
+    },
+    {
+      "aligned_bytestream_identical": [
+        true,
+        false
+      ],
+      "app": "com.encrypt.bwt",
+      "changed_fraction24_max": 0.0012578125,
+      "changed_fraction_any_max": 0.0019765625,
+      "external_author_bug": true,
+      "id": 338,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "state-loseinput"
+    },
+    {
+      "aligned_bytestream_identical": [
+        false,
+        true
+      ],
+      "app": "cz.vitskalicky.lepsirozvrh",
+      "changed_fraction24_max": 0.0006970486,
+      "changed_fraction_any_max": 0.0018923611,
+      "external_author_bug": true,
+      "id": 339,
+      "predictions": {
+        "aligned": {
+          "any_pixel": true,
+          "global": false,
+          "localized": true
+        },
+        "always_clean": {
+          "null": false
+        },
+        "wrong_viewport_correct_gate": {
+          "abstain_due_to_dimensions": true
+        },
+        "wrong_viewport_forced": {
+          "any_pixel": true,
+          "global": true,
+          "localized": true
+        }
+      },
+      "type": "layout-miss"
+    }
+  ],
+  "previous_report_sha256": "016f63db4c4192cdc936a5ecf1267455d3c61b4e9b219526af5dab3d9394f869",
+  "previous_source_evidence_sha256": "11eb3e7fb00eccca5faa2941afa6d9db6a7934925b4fdb5df916ddd8cfa3c888",
+  "resources": {
+    "distinct_original_images_requested": 515,
+    "download_origins": {
+      "already": 511,
+      "original_release_404": 2,
+      "verified_source_404_no_repeat": 2
+    },
+    "download_seconds": 1.896,
+    "first_failed_source_acquisition_attempt_seconds": 110.781,
+    "gpu_inference": false,
+    "initial_failure": "An initial 110.781 s source acquisition phase downloaded original PNGs but stopped when an author-referenced clean image was HTTP 404, before any predictions were frozen. Subsequent resumption used cached unchanged original bytes and abstained on missing source references.",
+    "recorded_combined_attempts_download_plus_features_seconds": 414.587,
+    "successful_resume_download_seconds": 1.896,
+    "total_native_RGB_CPU_plus_wrong_viewport_resizing_seconds": 301.91,
+    "unknown_latency": "Live end-to-end SWAAG tool-call latency absent; numbers are batch wall time on busy Nitro CPU, both methods share image decoding; forced viewport comparisons consume additional processing."
+  },
+  "selection": {
+    "app_grouped_uncertainty_not_new_human_labels": true,
+    "heldout_unique_apps": 54,
+    "new_apps": 54,
+    "parent_test": 340,
+    "previously_unused_heldout": 240,
+    "prior_apps": 39,
+    "prior_development_examples": 100,
+    "shared_apps_across_rounds": 31,
+    "source_biased_author_mutations": true
+  },
+  "source_revision": "25b6e8214c5be600f54dc0834eaf4597fa9192e6",
+  "source_sha256": "0586b29f82590636806e7dd05a45e6933d46286318a52e444cee4241fb785ca7",
+  "status": "PARTIAL"
+}
