@@ -1,0 +1,145 @@
+{
+  "audio_synchronization": "REVIEW",
+  "browser": {
+    "all_media_times_non_decreasing": true,
+    "browser": "Firefox isolated, headless, local file native HTML5 video viewer, no web server",
+    "controls": "Expected ended currentTime~14 s; stable 960x540; no media errors, nondecreasing times. Does not verify source camera details or visual film quality.",
+    "date": "2026-10-26",
+    "decoded_video_source_fidelity_sha256": "4e3331b360ca6ee3c3ae6573828f02bdb74a1059a5d3ad46819bfad1d794a841",
+    "elapsed_wall_s": 27.315,
+    "ended_successfully": true,
+    "first_view": {
+      "current_time": 4.7e-05,
+      "duration": 14,
+      "ended": false,
+      "media_error": null,
+      "muted": false,
+      "network_state": 1,
+      "paused": false,
+      "playback_rate": 1,
+      "ready_state": 4,
+      "video_found": true,
+      "video_height": 540,
+      "video_width": 960
+    },
+    "last_view": {
+      "current_time": 14,
+      "duration": 14,
+      "ended": true,
+      "media_error": null,
+      "muted": true,
+      "network_state": 1,
+      "paused": true,
+      "playback_rate": 1,
+      "ready_state": 2,
+      "video_found": true,
+      "video_height": 540,
+      "video_width": 960,
+      "wall_elapsed_s": 27.315
+    },
+    "media_time_max_interval_s": 1.25,
+    "play_command": {
+      "ok": true
+    },
+    "sampled_states_n": 27,
+    "screenshots_saved": [
+      {
+        "file": "/data/var/perceptual-independent-20261024/final_encoded_owner_mp4_20261026/actual_browser_playing_warehouse_film.png",
+        "sha256": "e836a8ca9ea6fcfc5006bc169b50ba36a55f7534f015fddb9dafbbc12c7ffbc5",
+        "time_s": 5.446
+      }
+    ],
+    "source_sha256": "e2ef866ec79318a6b3812865a51922141ad02be66b555900da311171f49b4adb",
+    "status": "PASS"
+  },
+  "date": "2026-10-26",
+  "decoded": {
+    "dock": {
+      "PSNR_dB_less_than_25_count": 210,
+      "SSIM_gray240_median": 0.18288,
+      "correct_minus_shifted_median_dB": -0.0,
+      "native_pixel_motion_median": 8.47083,
+      "original_frames_count": 210,
+      "shifted_source_15frame_PSN_dB_median": 8.646,
+      "source_alignment_PSN_dB_max": 11.9767,
+      "source_alignment_PSN_dB_median": 8.646,
+      "source_alignment_PSN_dB_min": 7.1842
+    },
+    "source_matched_frame_sequence_property": "PASS",
+    "warehouse": {
+      "PSNR_dB_less_than_25_count": 0,
+      "SSIM_gray240_median": 0.9966,
+      "correct_minus_shifted_median_dB": 21.449,
+      "native_pixel_motion_median": 12.45401,
+      "original_frames_count": 210,
+      "shifted_source_15frame_PSN_dB_median": 14.248,
+      "source_alignment_PSN_dB_max": 40.1558,
+      "source_alignment_PSN_dB_median": 35.697,
+      "source_alignment_PSN_dB_min": 33.2842
+    }
+  },
+  "evidence_sha256": {
+    "actual_browser_playing_warehouse_film.png": "e836a8ca9ea6fcfc5006bc169b50ba36a55f7534f015fddb9dafbbc12c7ffbc5",
+    "actual_final_warehouse_mp4_decoded_contact_sheet.jpg": "fd9495b70a146d17c640599ffbff38c4e525e3d7ee8100cf6ab2c8a7af10ad3d",
+    "browser_html5_playback_20261026.json": "92fd714d95bf1d1bb567d5aca890c27683f21036514a9c7800fa2382e7b5af7d",
+    "decoded_frame_evidence.json": "4e3331b360ca6ee3c3ae6573828f02bdb74a1059a5d3ad46819bfad1d794a841",
+    "protocol.json": "c6838c9b9852a9d1db16e573612d0dde87e1b9cf901a213de04130a37547a094",
+    "source_manifest.json": "9545b8ea3eaf3d6e365b8746f4754df1ad9951f6f5ec624ffdf77f48d43eb2e7"
+  },
+  "gpu_used": false,
+  "latency": {
+    "decode_native_RGB_and_compare_dock_seconds": 25.574,
+    "decode_native_RGB_and_compare_warehouse_seconds": 27.205,
+    "ffprobe_pts_seconds": 8.916,
+    "read_verified_original_PNGs_seconds": 19.486
+  },
+  "limits": [
+    "Encoded frames match the author-rendered source but cannot establish photorealism or semantic 3D geometry.",
+    "The warehouse original contains no audio stream; sync cannot be tested.",
+    "Different dock and shifted source are invalid reference negatives, not deliberately faulty films.",
+    "Firefox headless file playback reaching ended is a playback smoke test, not the user watching/approving video.",
+    "Transfer of the contact sheet into chat was denied, not repeated; local original retained."
+  ],
+  "mp4_sha256": "e2ef866ec79318a6b3812865a51922141ad02be66b555900da311171f49b4adb",
+  "negative_dock_sha256": "75ef01e7316d099759f4e1dccec304f4c3ea8a995949deebe7f6b41962c6ef93",
+  "original_mp4s_unmodified": true,
+  "physical_contact_from_video": "REVIEW",
+  "pts": {
+    "dock": {
+      "count": 210,
+      "first_sec": 0.0,
+      "frame_timebase_max_error_seconds": 3.333333342681044e-07,
+      "key_frames": 1,
+      "last_sec": 13.933333,
+      "max_interval_s": 0.0666670000000007,
+      "min_interval_s": 0.06666599999999967,
+      "nonmonotonic_count": 0
+    },
+    "warehouse": {
+      "count": 210,
+      "first_sec": 0.0,
+      "frame_timebase_max_error_seconds": 3.333333342681044e-07,
+      "key_frames": 1,
+      "last_sec": 13.933333,
+      "max_interval_s": 0.0666670000000007,
+      "min_interval_s": 0.06666599999999967,
+      "nonmonotonic_count": 0
+    }
+  },
+  "source": {
+    "all_source_frame_hashes_verified": true,
+    "original_frame_count": 210,
+    "render_status_sha256": "e885f3e7930079ce9535430984e9056a97b3183bb8aa424aedd1e22a6a11f150",
+    "scene_sha256": "6609f09ac0637dd232539f7d5de49ce3e59dc477a5bf25beb125ddcbf73849b6"
+  },
+  "status": "PARTIAL",
+  "storyboard_transfer_denied": true,
+  "subjective_video_quality": "REVIEW",
+  "tail": {
+    "early_first_165_decoded_adjacent_frame_gray_motion_median": 13.12353,
+    "frames_after_source_camera_stop": 45,
+    "measures_are_pixels_not_camera_keyframes": true,
+    "tail_last_45_decoded_adjacent_frame_gray_motion_median": 0.00071,
+    "tail_motion_nonzero_frames": 45
+  }
+}
