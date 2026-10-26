@@ -1,0 +1,906 @@
+{
+  "all_72_unanimously_negative": true,
+  "case_hash_flags": [
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "681d12400213531e5fdef04c597ac192d359c2d0351df6f22f0240134d873350",
+      "source_stratum": "Gemini|alignment"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "b064bdba191139689139124101c1c39926326a9b221bd8dfcd603f065c3dc3b8",
+      "source_stratum": "Gemini|alignment"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "835cc509d6d86a3a287de70581b43415aee21309f2dfd9533df5f563f37e3b22",
+      "source_stratum": "Gemini|alignment"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": true,
+      "flag_union": true,
+      "id_hash": "b4c8ac20a87e493a3dd30a6f16094149771660c1ae17fbab1e4adfef86c76091",
+      "source_stratum": "Gemini|alignment"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "c2a181d8178a9f753b013fc4bb892ceeb5dc5bcb763352610844b93341ea52a4",
+      "source_stratum": "Gemini|alignment"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": true,
+      "flag_union": true,
+      "id_hash": "316c0f93c7fe125865d85d6e7e7a31b79e9a46c414c45078b732080fa22ef2a3",
+      "source_stratum": "Gemini|alignment"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "a4e987d17584557e2fbed011cddf66dc5185338bc3ef33d4226f86c32b7364dd",
+      "source_stratum": "Gemini|layout"
+    },
+    {
+      "flag_CLIP": false,
+      "flag_OCR": false,
+      "flag_source_geometry": false,
+      "flag_union": false,
+      "id_hash": "4e47eb5525df25f94da777993dafa41d9ab2bfa80a89e28f76d42cd46ab082e7",
+      "source_stratum": "Gemini|layout"
+    },
+    {
+      "flag_CLIP": false,
+      "flag_OCR": false,
+      "flag_source_geometry": false,
+      "flag_union": false,
+      "id_hash": "7f9401303ba2dafb41c911e1957b16e370a167a55cd62aa474431165ec993954",
+      "source_stratum": "Gemini|layout"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "0f427d4e1430f8f57221d70dca9854b6bd67c42fda811e0f27939a58a46f25ae",
+      "source_stratum": "Gemini|layout"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": true,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "d0ab864a17dbd8a07dda05a58ac74d4894b7effa8e1c5152d71adf8b1fcc24d9",
+      "source_stratum": "Gemini|layout"
+    },
+    {
+      "flag_CLIP": false,
+      "flag_OCR": true,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "b1585fdb272b31401eaac5dd46a936c1c09b4861e53e23f12ac72fc077b3c82c",
+      "source_stratum": "Gemini|layout"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "10e4e7caf8b078429bb1c80b1a10118ac6f963eff098fd25a66c78862ae5ebce",
+      "source_stratum": "Gemini|nojitter"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "92151fcdb9a5905261ba18d5eede8cac7e3d3af47cf782cc9930ec2f2fb9f731",
+      "source_stratum": "Gemini|nojitter"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "1cdabc0d91a051251a6e7b1bd972f6cb63daafcee9a8256d9e1a1fa8f95ee086",
+      "source_stratum": "Gemini|nojitter"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "87c7965a1cc6c11a653b210aaef95e381b95afddf1781da3fa5b2d4b1d3097bf",
+      "source_stratum": "Gemini|nojitter"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "ee377871c73631fd6543ddb5164d0b48ea072daa207a91ac696051e0838135dd",
+      "source_stratum": "Gemini|nojitter"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "cb5611d87825a1dd6d0c724d68396193dc9d07a0db6a756d34b18bceea1aa46b",
+      "source_stratum": "Gemini|nojitter"
+    },
+    {
+      "flag_CLIP": false,
+      "flag_OCR": true,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "a5abb1500bdeaef41e2edd598c015edfaa46793051b82d7da60a70efbf786da4",
+      "source_stratum": "Gemini|texture"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": true,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "d8d1713dc581651249161742dc814f8368913d77c6f08041e79df7a7fe73750b",
+      "source_stratum": "Gemini|texture"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": true,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "90bbc9533a02213ffdf4d1482eb9b97a5feec554e33641d40f24777cbe5a8341",
+      "source_stratum": "Gemini|texture"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "8a9a02d73aeefd97306a08c30969a9e8d5ef03960978a1c5db4447558d40f689",
+      "source_stratum": "Gemini|texture"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "262b06d105e1c865b01c3e0a74291cdae511ef15f3d456e14fbe2dffd9efe3b9",
+      "source_stratum": "Gemini|texture"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "8111eb1556229541d7d2720a51203037e78ee57fb2e407e0da4a805473dab7af",
+      "source_stratum": "Gemini|texture"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": true,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "3de8392541ace28284aca7f2724273739fcf4cf73de276a8ddd3547c0011323c",
+      "source_stratum": "Google|alignment"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": true,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "34be1021b378c5701b4dd1430970982e0dbe72b3b340018d7a9b65939881ed7b",
+      "source_stratum": "Google|alignment"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "8ba5ef4e282bf7bc5cf13f731a1b9f525bd3b1f69cbfa24c1c69c303c0ac7019",
+      "source_stratum": "Google|alignment"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "023849c38925e2af028a2eb4e1dc41afd7dc7a238195c1c2ae00438d1dae00e1",
+      "source_stratum": "Google|alignment"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": true,
+      "flag_union": true,
+      "id_hash": "07e9bba1c63a7a01f935ee06d931c453e0864fc0fcc11ec445a8af60a36cc6c8",
+      "source_stratum": "Google|alignment"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "400b6feaba94359995cb987b5dbf76665c18e226aa77cb08695fad93d2d8a37f",
+      "source_stratum": "Google|alignment"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": true,
+      "flag_union": true,
+      "id_hash": "238f12f53f02e14ae4ee8a929f4fecc09390e03fa17e66edda594b04d9122678",
+      "source_stratum": "Google|layout"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": true,
+      "flag_union": true,
+      "id_hash": "4ea837ac2e51fbac23f73aff0a9dd25089f67d3e4b1b5355219dc8f254f4653d",
+      "source_stratum": "Google|layout"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "3538a1ef2e113da64249eea7bd068b585ec7ce5df73b2d1e319d8c9bf47eb314",
+      "source_stratum": "Google|layout"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": true,
+      "flag_union": true,
+      "id_hash": "eaf89db7108470dc3f6b23ea90618264b3e8f8b6145371667c4055e9c5ce9f52",
+      "source_stratum": "Google|layout"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": true,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "13be5b896be039957e7996f606c8513fa2d9061132bdcabdbee5a362dd9fd8ff",
+      "source_stratum": "Google|layout"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": true,
+      "flag_union": true,
+      "id_hash": "40fb7164e459a38813f304e3b45db2b074be149818924e46fdc49cc38a3e4955",
+      "source_stratum": "Google|layout"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": true,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "ef2d127de37b942baad06145e54b0c619a1f22327b2ebbcfbec78f5564afe39d",
+      "source_stratum": "Google|nojitter"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": true,
+      "flag_union": true,
+      "id_hash": "2c6499976963e9832529bc8d9dff516d16c13d372d852d1500f5892e46a25507",
+      "source_stratum": "Google|nojitter"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "451b01cbb6bdda2450c47423173e5655a3760dd6b130d95005d3b14600f21173",
+      "source_stratum": "Google|nojitter"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "65a699905c02619370bcf9207f5a477c3d67130ca71ec6f750e07fe8d510b084",
+      "source_stratum": "Google|nojitter"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": true,
+      "flag_union": true,
+      "id_hash": "11382b8de6b4b042f25bf021335d31c09f2f23ae80ca4dafc63214691dfb3dae",
+      "source_stratum": "Google|nojitter"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": true,
+      "flag_union": true,
+      "id_hash": "ab5e292db6495899871d889aaab28308f7da8dfc3693a477ee73de9ad894ce44",
+      "source_stratum": "Google|nojitter"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": true,
+      "flag_source_geometry": true,
+      "flag_union": true,
+      "id_hash": "e1d9ce80c3abd825263ac199b82e1e29431d2b681312842a35cf8ee744911eaa",
+      "source_stratum": "Google|texture"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "b2cc86ae48fd3b8775335b586b3549e53af3d749f07748a7343f893522ae63ea",
+      "source_stratum": "Google|texture"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": true,
+      "flag_union": true,
+      "id_hash": "ee932b02fc14995ab1085f9c686b916d3dd5d21361ca4c20923965257334991d",
+      "source_stratum": "Google|texture"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": true,
+      "flag_union": true,
+      "id_hash": "e1406f532a84b02f7b7645f2c4041c0dc25c70f10a5f0bb769efa589bcbf492f",
+      "source_stratum": "Google|texture"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": true,
+      "flag_source_geometry": true,
+      "flag_union": true,
+      "id_hash": "a1e8154bd1a4c96efad1d5bd4a3ecbd73f4f39a44b14b6025cff18b31ddef7f0",
+      "source_stratum": "Google|texture"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "a0bd500821a86e562ff1a1ab1d85caca8f3ddd287a0a3267536f9a1b7335cfb3",
+      "source_stratum": "Google|texture"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": true,
+      "flag_source_geometry": true,
+      "flag_union": true,
+      "id_hash": "80c39b8ca01cdfda142928ba683d503173017d52bfafacb118c62e34ec9bc693",
+      "source_stratum": "gdcdataset|alignment"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": true,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "6d78b19a042a64f08cc4df0d42fb91cd757829718e60e82a54e3498f03f3ef32",
+      "source_stratum": "gdcdataset|alignment"
+    },
+    {
+      "flag_CLIP": false,
+      "flag_OCR": true,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "38813d9a6e5332787f13dac070d265339c4c711beea8b21f82966684bda30e79",
+      "source_stratum": "gdcdataset|alignment"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": true,
+      "flag_source_geometry": true,
+      "flag_union": true,
+      "id_hash": "b3282a2f2a28757b3a18ab833de16a9c54518c0b0cf493e3f0a7cf09386f326a",
+      "source_stratum": "gdcdataset|alignment"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "dcb5d6e69e4ded78464ae2843f509daf65c9ca09dfdc9b5ad69166341963a877",
+      "source_stratum": "gdcdataset|alignment"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": true,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "6df26dfff059f42aeb0607a761d34c2b820af73ab0c5bfb111f7fe9dadda850a",
+      "source_stratum": "gdcdataset|alignment"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "15197cf7214b58e67cae565e573ffd9aa44bcb81f8ee5d7185dfe8da0a16ef43",
+      "source_stratum": "gdcdataset|layout"
+    },
+    {
+      "flag_CLIP": false,
+      "flag_OCR": true,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "998bae6a40b82ac12dd182fbb3bd6bbbc49809216aa316afdda461dbb0a8e5df",
+      "source_stratum": "gdcdataset|layout"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": true,
+      "flag_union": true,
+      "id_hash": "3d34f102d1708fc5edd3111144f78764b4d7b745cb5450815780545495df1e68",
+      "source_stratum": "gdcdataset|layout"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": true,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "50f33355a7ee09448ecd0e3a6c4ff600e0e15f9545be01108dc163b36adf141d",
+      "source_stratum": "gdcdataset|layout"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": true,
+      "flag_union": true,
+      "id_hash": "597180d3039f1b7b7dde3ebdc56e13c698ef66dc18cf72ed61a4f79c8a904524",
+      "source_stratum": "gdcdataset|layout"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": true,
+      "flag_source_geometry": true,
+      "flag_union": true,
+      "id_hash": "c4ed8e89485d94f74489c8120a6734bb7a9ebdd906328e22a7d89a79be6513cf",
+      "source_stratum": "gdcdataset|layout"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": true,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "914c948388ae30bdb0179a2f7bc91836d6af004171af735188fc1b69c286c864",
+      "source_stratum": "gdcdataset|nojitter"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": true,
+      "flag_source_geometry": true,
+      "flag_union": true,
+      "id_hash": "d8ed8ca27d83a63df6982905ea53b4613b9d7974edcee06f301cf43d63177f47",
+      "source_stratum": "gdcdataset|nojitter"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": true,
+      "flag_union": true,
+      "id_hash": "7182dd431b5c8833ed3c8a02c8615780df8dca7d83ed4166962b207f45a656b5",
+      "source_stratum": "gdcdataset|nojitter"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "7ffc2066e20c16e95c0b41167e334afe57ff4991b21c8d581611a3f516a786a9",
+      "source_stratum": "gdcdataset|nojitter"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": true,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "b7c7470e59e2a2df1bfd0a4705488ee6fe0c5c125de15cccdfab0e00d6c03dc0",
+      "source_stratum": "gdcdataset|nojitter"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "aae9ee5b6b7b41c2528dec1714e2b385d69b8c7dde33e6fea8c8973a99a49c7a",
+      "source_stratum": "gdcdataset|nojitter"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": true,
+      "flag_source_geometry": true,
+      "flag_union": true,
+      "id_hash": "48b361d46638bfa4eee090c158a750a69c7beec3a62e703e2801125551b1b157",
+      "source_stratum": "gdcdataset|texture"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": true,
+      "flag_union": true,
+      "id_hash": "cbd02d97b0731d88c78d30c20d90492b2d4c3f2f983931c38fef2dedc7ce48d4",
+      "source_stratum": "gdcdataset|texture"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": true,
+      "flag_source_geometry": true,
+      "flag_union": true,
+      "id_hash": "3635a91e3da857f7847f68185a116a5260d2593f3913f6b1b66cc2d75b0d6ec0",
+      "source_stratum": "gdcdataset|texture"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": true,
+      "flag_source_geometry": true,
+      "flag_union": true,
+      "id_hash": "e85cdd30a33c8fbee53826f320976004b87d7f4660d2b2743cb2d39ce23da5f1",
+      "source_stratum": "gdcdataset|texture"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": false,
+      "flag_source_geometry": true,
+      "flag_union": true,
+      "id_hash": "a0f8b2c4cb1ac82abdb37f0fe5203b97be556c4468c83bba18684d620fd8eaf9",
+      "source_stratum": "gdcdataset|texture"
+    },
+    {
+      "flag_CLIP": true,
+      "flag_OCR": true,
+      "flag_source_geometry": false,
+      "flag_union": true,
+      "id_hash": "2452984f72ef1195df62ab3f23748777dbf39767229425f1bfd0862d476e5840",
+      "source_stratum": "gdcdataset|texture"
+    }
+  ],
+  "date": "2026-10-26",
+  "deployment_decision": {
+    "cost_error_tradeoff": "OCR flags 26/72 human unanimous all-negative slides at 171 s CPU; CLIP flags 66/72 at 61 s; union flags 70/72 at ARITHMETIC summed approx 232.3 s, while on older positives union improves target recall but greatly increases control alerts.",
+    "no_method_passes_universal_release": "True",
+    "pixel_only_automatic_fail": "NOT AUTHORIZED by evidence; would falsely reject visually human-unanimous category negatives",
+    "review_proposals": "Use named category OCR/CV/source geometry with exact region/context and uncertainty, prioritize human review; do not skip unflagged on final release unless previously qualified separate property passes",
+    "source_only_auto_fail": "Only when authoritative source AND final rendered state identity verified and narrowly specified actual source property failed; not blanket user-visible outcome"
+  },
+  "earlier_343_source_category_strong_human_positive_and_matched_negative_confusions": {
+    "Content Overflow/Cut-off": {
+      "CLIP_only": {
+        "FN": 30,
+        "FP": 62,
+        "TN": 20,
+        "TP": 52,
+        "abstained": 0
+      },
+      "CLIP_or_geometry": {
+        "FN": 25,
+        "FP": 65,
+        "TN": 17,
+        "TP": 57,
+        "abstained": 0
+      },
+      "OCR_only": {
+        "FN": 24,
+        "FP": 26,
+        "TN": 56,
+        "TP": 58,
+        "abstained": 0
+      },
+      "OCR_or_CLIP": {
+        "FN": 7,
+        "FP": 68,
+        "TN": 14,
+        "TP": 75,
+        "abstained": 0
+      },
+      "OCR_or_geometry": {
+        "FN": 20,
+        "FP": 32,
+        "TN": 50,
+        "TP": 62,
+        "abstained": 0
+      },
+      "all_three_union": {
+        "FN": 6,
+        "FP": 71,
+        "TN": 11,
+        "TP": 76,
+        "abstained": 0
+      },
+      "geometry_only": {
+        "FN": 73,
+        "FP": 7,
+        "TN": 75,
+        "TP": 9,
+        "abstained": 0
+      },
+      "null_no_proposal": {
+        "FN": 82,
+        "FP": 0,
+        "TN": 82,
+        "TP": 0,
+        "abstained": 0
+      }
+    },
+    "Insufficient Color Contrast for Readability": {
+      "CLIP_only": {
+        "FN": 8,
+        "FP": 16,
+        "TN": 4,
+        "TP": 12,
+        "abstained": 0
+      },
+      "CLIP_or_geometry": {
+        "FN": 8,
+        "FP": 16,
+        "TN": 4,
+        "TP": 12,
+        "abstained": 0
+      },
+      "OCR_only": {
+        "FN": 12,
+        "FP": 0,
+        "TN": 20,
+        "TP": 8,
+        "abstained": 0
+      },
+      "OCR_or_CLIP": {
+        "FN": 5,
+        "FP": 16,
+        "TN": 4,
+        "TP": 15,
+        "abstained": 0
+      },
+      "OCR_or_geometry": {
+        "FN": 12,
+        "FP": 0,
+        "TN": 20,
+        "TP": 8,
+        "abstained": 0
+      },
+      "all_three_union": {
+        "FN": 5,
+        "FP": 16,
+        "TN": 4,
+        "TP": 15,
+        "abstained": 0
+      },
+      "geometry_only": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 0,
+        "TP": 0,
+        "abstained": 40
+      },
+      "null_no_proposal": {
+        "FN": 20,
+        "FP": 0,
+        "TN": 20,
+        "TP": 0,
+        "abstained": 0
+      }
+    },
+    "Occluded Content": {
+      "CLIP_only": {
+        "FN": 31,
+        "FP": 78,
+        "TN": 27,
+        "TP": 74,
+        "abstained": 0
+      },
+      "CLIP_or_geometry": {
+        "FN": 5,
+        "FP": 85,
+        "TN": 20,
+        "TP": 100,
+        "abstained": 0
+      },
+      "OCR_only": {
+        "FN": 81,
+        "FP": 12,
+        "TN": 93,
+        "TP": 24,
+        "abstained": 0
+      },
+      "OCR_or_CLIP": {
+        "FN": 26,
+        "FP": 81,
+        "TN": 24,
+        "TP": 79,
+        "abstained": 0
+      },
+      "OCR_or_geometry": {
+        "FN": 9,
+        "FP": 40,
+        "TN": 65,
+        "TP": 96,
+        "abstained": 0
+      },
+      "all_three_union": {
+        "FN": 5,
+        "FP": 86,
+        "TN": 19,
+        "TP": 100,
+        "abstained": 0
+      },
+      "geometry_only": {
+        "FN": 12,
+        "FP": 33,
+        "TN": 72,
+        "TP": 93,
+        "abstained": 0
+      },
+      "null_no_proposal": {
+        "FN": 105,
+        "FP": 0,
+        "TN": 105,
+        "TP": 0,
+        "abstained": 0
+      }
+    }
+  },
+  "false_alarms_on_unanimous_negatives_per_category": {
+    "Content Overflow/Cut-off": {
+      "CLIP_only": 49,
+      "CLIP_or_geometry": 49,
+      "OCR_only": 19,
+      "OCR_or_CLIP": 61,
+      "OCR_or_geometry": 21,
+      "all_three_union": 61,
+      "geometry_only": 2,
+      "null_no_proposal": 0
+    },
+    "Insufficient Color Contrast for Readability": {
+      "CLIP_only": 46,
+      "CLIP_or_geometry": 46,
+      "OCR_only": 2,
+      "OCR_or_CLIP": 48,
+      "OCR_or_geometry": 2,
+      "all_three_union": 48,
+      "geometry_only": null,
+      "null_no_proposal": 0
+    },
+    "Occluded Content": {
+      "CLIP_only": 47,
+      "CLIP_or_geometry": 56,
+      "OCR_only": 8,
+      "OCR_or_CLIP": 48,
+      "OCR_or_geometry": 32,
+      "all_three_union": 57,
+      "geometry_only": 26,
+      "null_no_proposal": 0
+    }
+  },
+  "false_review_proposal_rate_bootstrapped95_stratified": {
+    "CLIP_only": [
+      0.8611,
+      0.9722
+    ],
+    "CLIP_or_geometry": [
+      0.8611,
+      0.9722
+    ],
+    "OCR_only": [
+      0.2778,
+      0.4583
+    ],
+    "OCR_or_CLIP": [
+      0.9444,
+      1.0
+    ],
+    "OCR_or_geometry": [
+      0.5,
+      0.6944
+    ],
+    "all_three_union": [
+      0.9444,
+      1.0
+    ],
+    "geometry_only": [
+      0.2639,
+      0.4583
+    ],
+    "null_no_proposal": [
+      0.0,
+      0.0
+    ]
+  },
+  "false_review_proposals_per_72_human_unanimous_negatives": {
+    "CLIP_only": 66,
+    "CLIP_or_geometry": 66,
+    "OCR_only": 26,
+    "OCR_or_CLIP": 70,
+    "OCR_or_geometry": 43,
+    "all_three_union": 70,
+    "geometry_only": 26,
+    "null_no_proposal": 0
+  },
+  "full_raw_matrix_source_sha256": "2e2b0e5b7837999cb21ba8b17f5222f99ee0e9b8aeb47f9f6f4313c58f465716",
+  "gold": "72 previously unseen original image files (not in earlier 343), 6 per each of 12 source/alteration strata; all three target defect categories independently unanimously absent. Other defects and actual interactive GUI correctness not certified.",
+  "latency_and_resource": {
+    "CLIP_CPU_peak_RSS_KB": 1193516,
+    "CLIP_model_loading_s": 2.733,
+    "GPU_used": false,
+    "OCR_CPU_peak_RSS_KB": 332552,
+    "actual_72_average_CPU_time_per_image_s": {
+      "CLIP_only": 0.852,
+      "OCR_only": 2.3749,
+      "geometry_only": 0.0007
+    },
+    "actually_measured_separate_method_72_wall_s": {
+      "CLIP_only": 61.341,
+      "OCR_only": 170.992,
+      "geometry_only": 0.05
+    },
+    "combined_OCR_plus_CLIP_arithmetic_sequential_sum_72_s": 232.333,
+    "combined_model_end_to_end_wall_time_unmeasured": true,
+    "human_review_time_per_case": "NOT MEASURED",
+    "source_only_geometry_RSS_not_separately_isolated": true,
+    "total_new_72_original_source_download_s": 14.331,
+    "total_new_72_source_download_bytes_MB": 34.67
+  },
+  "limitations": [
+    "New 72 unanimous triple-negative image set is not an independent institution or a native mobile app, but previously UNUSED instances of same published slide corpus",
+    "Old positives/category-negatives were balanced and all positive categories selected, so cannot infer actual deployment prevalence or cross-domain precision",
+    "Combined OR rules are POSTHOC cost/error diagnostics on same frozen predictions, not individually preregistered new winners",
+    "Zero flags in one category means finite uncertainty; domain/source correlation invalidates naive iid confidence guarantees",
+    "Source geometry is not image perception; source rectangles may not reflect final altered pixels",
+    "Human review labor time and real owner audio/3D/perceptual quality have not been measured.",
+    "No expert-human final owner GUI labels, actor/3D mesh semantics, real defect audiovisual timing or live SWAAG analyzer integration evaluated in this specific new 72-slide test.",
+    "Previous 343 positive/control cases and new 72 triple-negative cases have DIFFERENT source-selection schemes. Do not combine their TP/FP counts to claim an unbiased overall deployment accuracy."
+  ],
+  "origin": "SlideAudit UIST 2025, 600 original and 1800 deliberately altered slides, Prolific trained human annotators, 3 people each; strong agreement = unanimous 3/3. CC BY 4.0 original repository pinned 642d490b7c1d2e78a50a631bfd359433397f3ecf",
+  "original_dataset_URL": "https://github.com/zhuohaouw/SlideAudit",
+  "original_frozen_SHA256": {
+    "new_clip": "72290e54a4cc2be71f439a69a7be9aaac5ddbee354d1acc0abd60a91d2ce2286",
+    "new_cv": "c5e5f05e7daa6b8f5e69191b03c17dcb26e9f21c911d612d5b0debfe0fa3f8e3",
+    "new_gold": "0f277303e8213e08b0ec0ff55beee821ba06c322c7d32a9100ed2a6ba70ad3b6",
+    "new_source_geometry": "0335f708cb75439ddc885f9523846f0119d0b7b7f8855ab4883d8d4b010de933",
+    "old_clip": "164259c1263b83316f95c32b1ccae825efbd7e05d0a0e13d48e5884a25d93cc4",
+    "old_cv": "13010ad89e5b549b7a2c2de6379bb51d9cd1bc3e82f0a8ff65f56249375cc87c",
+    "old_geometry": "c5d6258799fe9d9d455ca5395807e5ea8d862f5ef207b1eec1b9196136f897fb",
+    "old_gold": "ba9b55128ce40c68e4e13a122fe9d09075e83f9e4615b23c63312015da626828"
+  },
+  "primary_paper_URL": "https://pmc.ncbi.nlm.nih.gov/articles/PMC13227769/",
+  "revision": "642d490b7c1d2e78a50a631bfd359433397f3ecf",
+  "scoring_erratum": {
+    "corrected_source_geometry_contrast": "NOT APPLICABLE (null), no source contrast detector; all source-only contrast positive/negative observations abstain",
+    "immutable_original_model_predictions_unchanged": true,
+    "original_derived_deployment_policy_tradeoffs_json_SHA256": "2e2b0e5b7837999cb21ba8b17f5222f99ee0e9b8aeb47f9f6f4313c58f465716",
+    "source_geometry_contrast_reported_zero_is_invalid": true
+  },
+  "source_authority_vs_result_reconciliation": {
+    "CLIP_confidence": "relative zero-shot prompt preference, never an independently calibrated defect probability",
+    "OCR_approx_contrast": "grayscale within word box proxy, NOT verified WCAG foreground/background contrast and cannot auto-reject",
+    "authoritative_for_broad_human_visible_GUI_visual_defects": "NONE of the new tools or data makes a universal authoritative final GUI judge",
+    "human_unanimous_negative": "3 trained annotators agreed no specifically named flaw on each new rendered slide, NOT native app or mechanical reality",
+    "independent_human_vs_source_claim": "No contradiction: geometry of original source or matched prior author release can be correct while human-visible pixels have a different defect; these measure different properties",
+    "original_layout_source_geometry": "Source rectangles can prove authored-coordinate overlap/offslide under documented source contract, but this dataset source may precede deliberate raster modifications. Such rectangles cannot auto-FAIL human-visible occlusion or final screenshot clipping without source binding and intent.",
+    "owner_encoded_MP4": "prior original final warehouse 210-frame full decode and Firefox playback passed narrowly; no audio, photorealism or mechanical truth established"
+  },
+  "status": "PARTIAL",
+  "unseen_72_source_stratified": true
+}
