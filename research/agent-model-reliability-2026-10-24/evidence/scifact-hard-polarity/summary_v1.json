@@ -1,0 +1,2649 @@
+{
+  "clustered_paired_differences": {
+    "oracle_min_rationale": {
+      "joint_char_minus_always_support": {
+        "bootstrap_resamples": 1000,
+        "candidate_minus_baseline_accuracy": -0.167464,
+        "cluster_count": 188,
+        "clustered_ci95": [
+          -0.273128,
+          -0.057416
+        ]
+      },
+      "joint_word_minus_always_support": {
+        "bootstrap_resamples": 1000,
+        "candidate_minus_baseline_accuracy": -0.196172,
+        "cluster_count": 188,
+        "clustered_ci95": [
+          -0.295652,
+          -0.09596
+        ]
+      },
+      "joint_word_minus_evidence_only": {
+        "bootstrap_resamples": 1000,
+        "candidate_minus_baseline_accuracy": 0.023923,
+        "cluster_count": 188,
+        "clustered_ci95": [
+          -0.013636,
+          0.062802
+        ]
+      }
+    }
+  },
+  "limitations": [
+    "Original expert SUPPORT/CONTRADICT labels are real independent human-grounded polarity, but cannot establish true-negative irrelevant-doc classification.",
+    "Evidence oracle and a known correct original paper are assumed, not discovered by an agent.",
+    "This is a low-capacity, supervised CPU lexical model; no local Qwen or SWAAG worker/reviewer inference was performed.",
+    "One dev set previously used for retrieval research and shared paper corpus may create selection and reuse bias; claim text itself is held out exactly.",
+    "Classifier probabilities are not calibrated epistemic truth; report all hard negatives and incorrect outputs.",
+    "Mean source whitespace words are not model tokens and CPU wall time under concurrent load is not GPU queue latency."
+  ],
+  "matched_same_pairs_outcomes": {
+    "bm25_top3": {
+      "claim_only_word": {
+        "all": {
+          "FN": 59,
+          "FP": 51,
+          "TN": 20,
+          "TP": 79,
+          "accuracy": 0.473684,
+          "contradiction_recall": 0.28169,
+          "false_support_rate_among_contradictions": 0.71831,
+          "n": 209,
+          "support_recall": 0.572464
+        },
+        "expert_CONTRADICT": {
+          "FN": 0,
+          "FP": 51,
+          "TN": 20,
+          "TP": 0,
+          "accuracy": 0.28169,
+          "contradiction_recall": 0.28169,
+          "false_support_rate_among_contradictions": 0.71831,
+          "n": 71,
+          "support_recall": null
+        },
+        "expert_SUPPORT": {
+          "FN": 59,
+          "FP": 0,
+          "TN": 0,
+          "TP": 79,
+          "accuracy": 0.572464,
+          "contradiction_recall": null,
+          "false_support_rate_among_contradictions": null,
+          "n": 138,
+          "support_recall": 0.572464
+        },
+        "has_multiple_expert_alternatives": {
+          "FN": 26,
+          "FP": 21,
+          "TN": 13,
+          "TP": 25,
+          "accuracy": 0.447059,
+          "contradiction_recall": 0.382353,
+          "false_support_rate_among_contradictions": 0.617647,
+          "n": 85,
+          "support_recall": 0.490196
+        },
+        "has_one_expert_alternative": {
+          "FN": 33,
+          "FP": 30,
+          "TN": 7,
+          "TP": 54,
+          "accuracy": 0.491935,
+          "contradiction_recall": 0.189189,
+          "false_support_rate_among_contradictions": 0.810811,
+          "n": 124,
+          "support_recall": 0.62069
+        },
+        "has_single_sentence_alternative": {
+          "FN": 55,
+          "FP": 49,
+          "TN": 19,
+          "TP": 72,
+          "accuracy": 0.466667,
+          "contradiction_recall": 0.279412,
+          "false_support_rate_among_contradictions": 0.720588,
+          "n": 195,
+          "support_recall": 0.566929
+        },
+        "paper_id_seen_in_train": {
+          "FN": 46,
+          "FP": 35,
+          "TN": 12,
+          "TP": 31,
+          "accuracy": 0.346774,
+          "contradiction_recall": 0.255319,
+          "false_support_rate_among_contradictions": 0.744681,
+          "n": 124,
+          "support_recall": 0.402597
+        },
+        "paper_id_unseen_in_train": {
+          "FN": 13,
+          "FP": 16,
+          "TN": 8,
+          "TP": 48,
+          "accuracy": 0.658824,
+          "contradiction_recall": 0.333333,
+          "false_support_rate_among_contradictions": 0.666667,
+          "n": 85,
+          "support_recall": 0.786885
+        },
+        "requires_multiple_gold_sentences": {
+          "FN": 4,
+          "FP": 2,
+          "TN": 1,
+          "TP": 7,
+          "accuracy": 0.571429,
+          "contradiction_recall": 0.333333,
+          "false_support_rate_among_contradictions": 0.666667,
+          "n": 14,
+          "support_recall": 0.636364
+        },
+        "same_claim_multiple_expert_papers": {
+          "FN": 17,
+          "FP": 10,
+          "TN": 0,
+          "TP": 4,
+          "accuracy": 0.129032,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 31,
+          "support_recall": 0.190476
+        }
+      },
+      "evidence_only_word": {
+        "all": {
+          "FN": 53,
+          "FP": 55,
+          "TN": 16,
+          "TP": 85,
+          "accuracy": 0.483254,
+          "contradiction_recall": 0.225352,
+          "false_support_rate_among_contradictions": 0.774648,
+          "n": 209,
+          "support_recall": 0.615942
+        },
+        "expert_CONTRADICT": {
+          "FN": 0,
+          "FP": 55,
+          "TN": 16,
+          "TP": 0,
+          "accuracy": 0.225352,
+          "contradiction_recall": 0.225352,
+          "false_support_rate_among_contradictions": 0.774648,
+          "n": 71,
+          "support_recall": null
+        },
+        "expert_SUPPORT": {
+          "FN": 53,
+          "FP": 0,
+          "TN": 0,
+          "TP": 85,
+          "accuracy": 0.615942,
+          "contradiction_recall": null,
+          "false_support_rate_among_contradictions": null,
+          "n": 138,
+          "support_recall": 0.615942
+        },
+        "has_multiple_expert_alternatives": {
+          "FN": 25,
+          "FP": 23,
+          "TN": 11,
+          "TP": 26,
+          "accuracy": 0.435294,
+          "contradiction_recall": 0.323529,
+          "false_support_rate_among_contradictions": 0.676471,
+          "n": 85,
+          "support_recall": 0.509804
+        },
+        "has_one_expert_alternative": {
+          "FN": 28,
+          "FP": 32,
+          "TN": 5,
+          "TP": 59,
+          "accuracy": 0.516129,
+          "contradiction_recall": 0.135135,
+          "false_support_rate_among_contradictions": 0.864865,
+          "n": 124,
+          "support_recall": 0.678161
+        },
+        "has_single_sentence_alternative": {
+          "FN": 50,
+          "FP": 52,
+          "TN": 16,
+          "TP": 77,
+          "accuracy": 0.476923,
+          "contradiction_recall": 0.235294,
+          "false_support_rate_among_contradictions": 0.764706,
+          "n": 195,
+          "support_recall": 0.606299
+        },
+        "paper_id_seen_in_train": {
+          "FN": 44,
+          "FP": 36,
+          "TN": 11,
+          "TP": 33,
+          "accuracy": 0.354839,
+          "contradiction_recall": 0.234043,
+          "false_support_rate_among_contradictions": 0.765957,
+          "n": 124,
+          "support_recall": 0.428571
+        },
+        "paper_id_unseen_in_train": {
+          "FN": 9,
+          "FP": 19,
+          "TN": 5,
+          "TP": 52,
+          "accuracy": 0.670588,
+          "contradiction_recall": 0.208333,
+          "false_support_rate_among_contradictions": 0.791667,
+          "n": 85,
+          "support_recall": 0.852459
+        },
+        "requires_multiple_gold_sentences": {
+          "FN": 3,
+          "FP": 3,
+          "TN": 0,
+          "TP": 8,
+          "accuracy": 0.571429,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 14,
+          "support_recall": 0.727273
+        },
+        "same_claim_multiple_expert_papers": {
+          "FN": 16,
+          "FP": 10,
+          "TN": 0,
+          "TP": 5,
+          "accuracy": 0.16129,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 31,
+          "support_recall": 0.238095
+        }
+      },
+      "joint_pair_char": {
+        "all": {
+          "FN": 63,
+          "FP": 50,
+          "TN": 21,
+          "TP": 75,
+          "accuracy": 0.45933,
+          "contradiction_recall": 0.295775,
+          "false_support_rate_among_contradictions": 0.704225,
+          "n": 209,
+          "support_recall": 0.543478
+        },
+        "expert_CONTRADICT": {
+          "FN": 0,
+          "FP": 50,
+          "TN": 21,
+          "TP": 0,
+          "accuracy": 0.295775,
+          "contradiction_recall": 0.295775,
+          "false_support_rate_among_contradictions": 0.704225,
+          "n": 71,
+          "support_recall": null
+        },
+        "expert_SUPPORT": {
+          "FN": 63,
+          "FP": 0,
+          "TN": 0,
+          "TP": 75,
+          "accuracy": 0.543478,
+          "contradiction_recall": null,
+          "false_support_rate_among_contradictions": null,
+          "n": 138,
+          "support_recall": 0.543478
+        },
+        "has_multiple_expert_alternatives": {
+          "FN": 34,
+          "FP": 21,
+          "TN": 13,
+          "TP": 17,
+          "accuracy": 0.352941,
+          "contradiction_recall": 0.382353,
+          "false_support_rate_among_contradictions": 0.617647,
+          "n": 85,
+          "support_recall": 0.333333
+        },
+        "has_one_expert_alternative": {
+          "FN": 29,
+          "FP": 29,
+          "TN": 8,
+          "TP": 58,
+          "accuracy": 0.532258,
+          "contradiction_recall": 0.216216,
+          "false_support_rate_among_contradictions": 0.783784,
+          "n": 124,
+          "support_recall": 0.666667
+        },
+        "has_single_sentence_alternative": {
+          "FN": 59,
+          "FP": 48,
+          "TN": 20,
+          "TP": 68,
+          "accuracy": 0.451282,
+          "contradiction_recall": 0.294118,
+          "false_support_rate_among_contradictions": 0.705882,
+          "n": 195,
+          "support_recall": 0.535433
+        },
+        "paper_id_seen_in_train": {
+          "FN": 48,
+          "FP": 34,
+          "TN": 13,
+          "TP": 29,
+          "accuracy": 0.33871,
+          "contradiction_recall": 0.276596,
+          "false_support_rate_among_contradictions": 0.723404,
+          "n": 124,
+          "support_recall": 0.376623
+        },
+        "paper_id_unseen_in_train": {
+          "FN": 15,
+          "FP": 16,
+          "TN": 8,
+          "TP": 46,
+          "accuracy": 0.635294,
+          "contradiction_recall": 0.333333,
+          "false_support_rate_among_contradictions": 0.666667,
+          "n": 85,
+          "support_recall": 0.754098
+        },
+        "requires_multiple_gold_sentences": {
+          "FN": 4,
+          "FP": 2,
+          "TN": 1,
+          "TP": 7,
+          "accuracy": 0.571429,
+          "contradiction_recall": 0.333333,
+          "false_support_rate_among_contradictions": 0.666667,
+          "n": 14,
+          "support_recall": 0.636364
+        },
+        "same_claim_multiple_expert_papers": {
+          "FN": 17,
+          "FP": 9,
+          "TN": 1,
+          "TP": 4,
+          "accuracy": 0.16129,
+          "contradiction_recall": 0.1,
+          "false_support_rate_among_contradictions": 0.9,
+          "n": 31,
+          "support_recall": 0.190476
+        }
+      },
+      "joint_pair_word": {
+        "all": {
+          "FN": 59,
+          "FP": 53,
+          "TN": 18,
+          "TP": 79,
+          "accuracy": 0.464115,
+          "contradiction_recall": 0.253521,
+          "false_support_rate_among_contradictions": 0.746479,
+          "n": 209,
+          "support_recall": 0.572464
+        },
+        "expert_CONTRADICT": {
+          "FN": 0,
+          "FP": 53,
+          "TN": 18,
+          "TP": 0,
+          "accuracy": 0.253521,
+          "contradiction_recall": 0.253521,
+          "false_support_rate_among_contradictions": 0.746479,
+          "n": 71,
+          "support_recall": null
+        },
+        "expert_SUPPORT": {
+          "FN": 59,
+          "FP": 0,
+          "TN": 0,
+          "TP": 79,
+          "accuracy": 0.572464,
+          "contradiction_recall": null,
+          "false_support_rate_among_contradictions": null,
+          "n": 138,
+          "support_recall": 0.572464
+        },
+        "has_multiple_expert_alternatives": {
+          "FN": 29,
+          "FP": 22,
+          "TN": 12,
+          "TP": 22,
+          "accuracy": 0.4,
+          "contradiction_recall": 0.352941,
+          "false_support_rate_among_contradictions": 0.647059,
+          "n": 85,
+          "support_recall": 0.431373
+        },
+        "has_one_expert_alternative": {
+          "FN": 30,
+          "FP": 31,
+          "TN": 6,
+          "TP": 57,
+          "accuracy": 0.508065,
+          "contradiction_recall": 0.162162,
+          "false_support_rate_among_contradictions": 0.837838,
+          "n": 124,
+          "support_recall": 0.655172
+        },
+        "has_single_sentence_alternative": {
+          "FN": 56,
+          "FP": 50,
+          "TN": 18,
+          "TP": 71,
+          "accuracy": 0.45641,
+          "contradiction_recall": 0.264706,
+          "false_support_rate_among_contradictions": 0.735294,
+          "n": 195,
+          "support_recall": 0.559055
+        },
+        "paper_id_seen_in_train": {
+          "FN": 48,
+          "FP": 35,
+          "TN": 12,
+          "TP": 29,
+          "accuracy": 0.330645,
+          "contradiction_recall": 0.255319,
+          "false_support_rate_among_contradictions": 0.744681,
+          "n": 124,
+          "support_recall": 0.376623
+        },
+        "paper_id_unseen_in_train": {
+          "FN": 11,
+          "FP": 18,
+          "TN": 6,
+          "TP": 50,
+          "accuracy": 0.658824,
+          "contradiction_recall": 0.25,
+          "false_support_rate_among_contradictions": 0.75,
+          "n": 85,
+          "support_recall": 0.819672
+        },
+        "requires_multiple_gold_sentences": {
+          "FN": 3,
+          "FP": 3,
+          "TN": 0,
+          "TP": 8,
+          "accuracy": 0.571429,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 14,
+          "support_recall": 0.727273
+        },
+        "same_claim_multiple_expert_papers": {
+          "FN": 17,
+          "FP": 10,
+          "TN": 0,
+          "TP": 4,
+          "accuracy": 0.129032,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 31,
+          "support_recall": 0.190476
+        }
+      },
+      "support_prior": {
+        "all": {
+          "FN": 0,
+          "FP": 71,
+          "TN": 0,
+          "TP": 138,
+          "accuracy": 0.660287,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 209,
+          "support_recall": 1.0
+        },
+        "expert_CONTRADICT": {
+          "FN": 0,
+          "FP": 71,
+          "TN": 0,
+          "TP": 0,
+          "accuracy": 0.0,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 71,
+          "support_recall": null
+        },
+        "expert_SUPPORT": {
+          "FN": 0,
+          "FP": 0,
+          "TN": 0,
+          "TP": 138,
+          "accuracy": 1.0,
+          "contradiction_recall": null,
+          "false_support_rate_among_contradictions": null,
+          "n": 138,
+          "support_recall": 1.0
+        },
+        "has_multiple_expert_alternatives": {
+          "FN": 0,
+          "FP": 34,
+          "TN": 0,
+          "TP": 51,
+          "accuracy": 0.6,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 85,
+          "support_recall": 1.0
+        },
+        "has_one_expert_alternative": {
+          "FN": 0,
+          "FP": 37,
+          "TN": 0,
+          "TP": 87,
+          "accuracy": 0.701613,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 124,
+          "support_recall": 1.0
+        },
+        "has_single_sentence_alternative": {
+          "FN": 0,
+          "FP": 68,
+          "TN": 0,
+          "TP": 127,
+          "accuracy": 0.651282,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 195,
+          "support_recall": 1.0
+        },
+        "paper_id_seen_in_train": {
+          "FN": 0,
+          "FP": 47,
+          "TN": 0,
+          "TP": 77,
+          "accuracy": 0.620968,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 124,
+          "support_recall": 1.0
+        },
+        "paper_id_unseen_in_train": {
+          "FN": 0,
+          "FP": 24,
+          "TN": 0,
+          "TP": 61,
+          "accuracy": 0.717647,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 85,
+          "support_recall": 1.0
+        },
+        "requires_multiple_gold_sentences": {
+          "FN": 0,
+          "FP": 3,
+          "TN": 0,
+          "TP": 11,
+          "accuracy": 0.785714,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 14,
+          "support_recall": 1.0
+        },
+        "same_claim_multiple_expert_papers": {
+          "FN": 0,
+          "FP": 10,
+          "TN": 0,
+          "TP": 21,
+          "accuracy": 0.677419,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 31,
+          "support_recall": 1.0
+        }
+      }
+    },
+    "bm25_top5": {
+      "claim_only_word": {
+        "all": {
+          "FN": 59,
+          "FP": 51,
+          "TN": 20,
+          "TP": 79,
+          "accuracy": 0.473684,
+          "contradiction_recall": 0.28169,
+          "false_support_rate_among_contradictions": 0.71831,
+          "n": 209,
+          "support_recall": 0.572464
+        },
+        "expert_CONTRADICT": {
+          "FN": 0,
+          "FP": 51,
+          "TN": 20,
+          "TP": 0,
+          "accuracy": 0.28169,
+          "contradiction_recall": 0.28169,
+          "false_support_rate_among_contradictions": 0.71831,
+          "n": 71,
+          "support_recall": null
+        },
+        "expert_SUPPORT": {
+          "FN": 59,
+          "FP": 0,
+          "TN": 0,
+          "TP": 79,
+          "accuracy": 0.572464,
+          "contradiction_recall": null,
+          "false_support_rate_among_contradictions": null,
+          "n": 138,
+          "support_recall": 0.572464
+        },
+        "has_multiple_expert_alternatives": {
+          "FN": 26,
+          "FP": 21,
+          "TN": 13,
+          "TP": 25,
+          "accuracy": 0.447059,
+          "contradiction_recall": 0.382353,
+          "false_support_rate_among_contradictions": 0.617647,
+          "n": 85,
+          "support_recall": 0.490196
+        },
+        "has_one_expert_alternative": {
+          "FN": 33,
+          "FP": 30,
+          "TN": 7,
+          "TP": 54,
+          "accuracy": 0.491935,
+          "contradiction_recall": 0.189189,
+          "false_support_rate_among_contradictions": 0.810811,
+          "n": 124,
+          "support_recall": 0.62069
+        },
+        "has_single_sentence_alternative": {
+          "FN": 55,
+          "FP": 49,
+          "TN": 19,
+          "TP": 72,
+          "accuracy": 0.466667,
+          "contradiction_recall": 0.279412,
+          "false_support_rate_among_contradictions": 0.720588,
+          "n": 195,
+          "support_recall": 0.566929
+        },
+        "paper_id_seen_in_train": {
+          "FN": 46,
+          "FP": 35,
+          "TN": 12,
+          "TP": 31,
+          "accuracy": 0.346774,
+          "contradiction_recall": 0.255319,
+          "false_support_rate_among_contradictions": 0.744681,
+          "n": 124,
+          "support_recall": 0.402597
+        },
+        "paper_id_unseen_in_train": {
+          "FN": 13,
+          "FP": 16,
+          "TN": 8,
+          "TP": 48,
+          "accuracy": 0.658824,
+          "contradiction_recall": 0.333333,
+          "false_support_rate_among_contradictions": 0.666667,
+          "n": 85,
+          "support_recall": 0.786885
+        },
+        "requires_multiple_gold_sentences": {
+          "FN": 4,
+          "FP": 2,
+          "TN": 1,
+          "TP": 7,
+          "accuracy": 0.571429,
+          "contradiction_recall": 0.333333,
+          "false_support_rate_among_contradictions": 0.666667,
+          "n": 14,
+          "support_recall": 0.636364
+        },
+        "same_claim_multiple_expert_papers": {
+          "FN": 17,
+          "FP": 10,
+          "TN": 0,
+          "TP": 4,
+          "accuracy": 0.129032,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 31,
+          "support_recall": 0.190476
+        }
+      },
+      "evidence_only_word": {
+        "all": {
+          "FN": 53,
+          "FP": 54,
+          "TN": 17,
+          "TP": 85,
+          "accuracy": 0.488038,
+          "contradiction_recall": 0.239437,
+          "false_support_rate_among_contradictions": 0.760563,
+          "n": 209,
+          "support_recall": 0.615942
+        },
+        "expert_CONTRADICT": {
+          "FN": 0,
+          "FP": 54,
+          "TN": 17,
+          "TP": 0,
+          "accuracy": 0.239437,
+          "contradiction_recall": 0.239437,
+          "false_support_rate_among_contradictions": 0.760563,
+          "n": 71,
+          "support_recall": null
+        },
+        "expert_SUPPORT": {
+          "FN": 53,
+          "FP": 0,
+          "TN": 0,
+          "TP": 85,
+          "accuracy": 0.615942,
+          "contradiction_recall": null,
+          "false_support_rate_among_contradictions": null,
+          "n": 138,
+          "support_recall": 0.615942
+        },
+        "has_multiple_expert_alternatives": {
+          "FN": 28,
+          "FP": 22,
+          "TN": 12,
+          "TP": 23,
+          "accuracy": 0.411765,
+          "contradiction_recall": 0.352941,
+          "false_support_rate_among_contradictions": 0.647059,
+          "n": 85,
+          "support_recall": 0.45098
+        },
+        "has_one_expert_alternative": {
+          "FN": 25,
+          "FP": 32,
+          "TN": 5,
+          "TP": 62,
+          "accuracy": 0.540323,
+          "contradiction_recall": 0.135135,
+          "false_support_rate_among_contradictions": 0.864865,
+          "n": 124,
+          "support_recall": 0.712644
+        },
+        "has_single_sentence_alternative": {
+          "FN": 51,
+          "FP": 51,
+          "TN": 17,
+          "TP": 76,
+          "accuracy": 0.476923,
+          "contradiction_recall": 0.25,
+          "false_support_rate_among_contradictions": 0.75,
+          "n": 195,
+          "support_recall": 0.598425
+        },
+        "paper_id_seen_in_train": {
+          "FN": 45,
+          "FP": 35,
+          "TN": 12,
+          "TP": 32,
+          "accuracy": 0.354839,
+          "contradiction_recall": 0.255319,
+          "false_support_rate_among_contradictions": 0.744681,
+          "n": 124,
+          "support_recall": 0.415584
+        },
+        "paper_id_unseen_in_train": {
+          "FN": 8,
+          "FP": 19,
+          "TN": 5,
+          "TP": 53,
+          "accuracy": 0.682353,
+          "contradiction_recall": 0.208333,
+          "false_support_rate_among_contradictions": 0.791667,
+          "n": 85,
+          "support_recall": 0.868852
+        },
+        "requires_multiple_gold_sentences": {
+          "FN": 2,
+          "FP": 3,
+          "TN": 0,
+          "TP": 9,
+          "accuracy": 0.642857,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 14,
+          "support_recall": 0.818182
+        },
+        "same_claim_multiple_expert_papers": {
+          "FN": 16,
+          "FP": 10,
+          "TN": 0,
+          "TP": 5,
+          "accuracy": 0.16129,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 31,
+          "support_recall": 0.238095
+        }
+      },
+      "joint_pair_char": {
+        "all": {
+          "FN": 60,
+          "FP": 47,
+          "TN": 24,
+          "TP": 78,
+          "accuracy": 0.488038,
+          "contradiction_recall": 0.338028,
+          "false_support_rate_among_contradictions": 0.661972,
+          "n": 209,
+          "support_recall": 0.565217
+        },
+        "expert_CONTRADICT": {
+          "FN": 0,
+          "FP": 47,
+          "TN": 24,
+          "TP": 0,
+          "accuracy": 0.338028,
+          "contradiction_recall": 0.338028,
+          "false_support_rate_among_contradictions": 0.661972,
+          "n": 71,
+          "support_recall": null
+        },
+        "expert_SUPPORT": {
+          "FN": 60,
+          "FP": 0,
+          "TN": 0,
+          "TP": 78,
+          "accuracy": 0.565217,
+          "contradiction_recall": null,
+          "false_support_rate_among_contradictions": null,
+          "n": 138,
+          "support_recall": 0.565217
+        },
+        "has_multiple_expert_alternatives": {
+          "FN": 32,
+          "FP": 19,
+          "TN": 15,
+          "TP": 19,
+          "accuracy": 0.4,
+          "contradiction_recall": 0.441176,
+          "false_support_rate_among_contradictions": 0.558824,
+          "n": 85,
+          "support_recall": 0.372549
+        },
+        "has_one_expert_alternative": {
+          "FN": 28,
+          "FP": 28,
+          "TN": 9,
+          "TP": 59,
+          "accuracy": 0.548387,
+          "contradiction_recall": 0.243243,
+          "false_support_rate_among_contradictions": 0.756757,
+          "n": 124,
+          "support_recall": 0.678161
+        },
+        "has_single_sentence_alternative": {
+          "FN": 57,
+          "FP": 45,
+          "TN": 23,
+          "TP": 70,
+          "accuracy": 0.476923,
+          "contradiction_recall": 0.338235,
+          "false_support_rate_among_contradictions": 0.661765,
+          "n": 195,
+          "support_recall": 0.551181
+        },
+        "paper_id_seen_in_train": {
+          "FN": 48,
+          "FP": 33,
+          "TN": 14,
+          "TP": 29,
+          "accuracy": 0.346774,
+          "contradiction_recall": 0.297872,
+          "false_support_rate_among_contradictions": 0.702128,
+          "n": 124,
+          "support_recall": 0.376623
+        },
+        "paper_id_unseen_in_train": {
+          "FN": 12,
+          "FP": 14,
+          "TN": 10,
+          "TP": 49,
+          "accuracy": 0.694118,
+          "contradiction_recall": 0.416667,
+          "false_support_rate_among_contradictions": 0.583333,
+          "n": 85,
+          "support_recall": 0.803279
+        },
+        "requires_multiple_gold_sentences": {
+          "FN": 3,
+          "FP": 2,
+          "TN": 1,
+          "TP": 8,
+          "accuracy": 0.642857,
+          "contradiction_recall": 0.333333,
+          "false_support_rate_among_contradictions": 0.666667,
+          "n": 14,
+          "support_recall": 0.727273
+        },
+        "same_claim_multiple_expert_papers": {
+          "FN": 17,
+          "FP": 7,
+          "TN": 3,
+          "TP": 4,
+          "accuracy": 0.225806,
+          "contradiction_recall": 0.3,
+          "false_support_rate_among_contradictions": 0.7,
+          "n": 31,
+          "support_recall": 0.190476
+        }
+      },
+      "joint_pair_word": {
+        "all": {
+          "FN": 57,
+          "FP": 55,
+          "TN": 16,
+          "TP": 81,
+          "accuracy": 0.464115,
+          "contradiction_recall": 0.225352,
+          "false_support_rate_among_contradictions": 0.774648,
+          "n": 209,
+          "support_recall": 0.586957
+        },
+        "expert_CONTRADICT": {
+          "FN": 0,
+          "FP": 55,
+          "TN": 16,
+          "TP": 0,
+          "accuracy": 0.225352,
+          "contradiction_recall": 0.225352,
+          "false_support_rate_among_contradictions": 0.774648,
+          "n": 71,
+          "support_recall": null
+        },
+        "expert_SUPPORT": {
+          "FN": 57,
+          "FP": 0,
+          "TN": 0,
+          "TP": 81,
+          "accuracy": 0.586957,
+          "contradiction_recall": null,
+          "false_support_rate_among_contradictions": null,
+          "n": 138,
+          "support_recall": 0.586957
+        },
+        "has_multiple_expert_alternatives": {
+          "FN": 30,
+          "FP": 23,
+          "TN": 11,
+          "TP": 21,
+          "accuracy": 0.376471,
+          "contradiction_recall": 0.323529,
+          "false_support_rate_among_contradictions": 0.676471,
+          "n": 85,
+          "support_recall": 0.411765
+        },
+        "has_one_expert_alternative": {
+          "FN": 27,
+          "FP": 32,
+          "TN": 5,
+          "TP": 60,
+          "accuracy": 0.524194,
+          "contradiction_recall": 0.135135,
+          "false_support_rate_among_contradictions": 0.864865,
+          "n": 124,
+          "support_recall": 0.689655
+        },
+        "has_single_sentence_alternative": {
+          "FN": 54,
+          "FP": 52,
+          "TN": 16,
+          "TP": 73,
+          "accuracy": 0.45641,
+          "contradiction_recall": 0.235294,
+          "false_support_rate_among_contradictions": 0.764706,
+          "n": 195,
+          "support_recall": 0.574803
+        },
+        "paper_id_seen_in_train": {
+          "FN": 46,
+          "FP": 37,
+          "TN": 10,
+          "TP": 31,
+          "accuracy": 0.330645,
+          "contradiction_recall": 0.212766,
+          "false_support_rate_among_contradictions": 0.787234,
+          "n": 124,
+          "support_recall": 0.402597
+        },
+        "paper_id_unseen_in_train": {
+          "FN": 11,
+          "FP": 18,
+          "TN": 6,
+          "TP": 50,
+          "accuracy": 0.658824,
+          "contradiction_recall": 0.25,
+          "false_support_rate_among_contradictions": 0.75,
+          "n": 85,
+          "support_recall": 0.819672
+        },
+        "requires_multiple_gold_sentences": {
+          "FN": 3,
+          "FP": 3,
+          "TN": 0,
+          "TP": 8,
+          "accuracy": 0.571429,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 14,
+          "support_recall": 0.727273
+        },
+        "same_claim_multiple_expert_papers": {
+          "FN": 16,
+          "FP": 10,
+          "TN": 0,
+          "TP": 5,
+          "accuracy": 0.16129,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 31,
+          "support_recall": 0.238095
+        }
+      },
+      "support_prior": {
+        "all": {
+          "FN": 0,
+          "FP": 71,
+          "TN": 0,
+          "TP": 138,
+          "accuracy": 0.660287,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 209,
+          "support_recall": 1.0
+        },
+        "expert_CONTRADICT": {
+          "FN": 0,
+          "FP": 71,
+          "TN": 0,
+          "TP": 0,
+          "accuracy": 0.0,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 71,
+          "support_recall": null
+        },
+        "expert_SUPPORT": {
+          "FN": 0,
+          "FP": 0,
+          "TN": 0,
+          "TP": 138,
+          "accuracy": 1.0,
+          "contradiction_recall": null,
+          "false_support_rate_among_contradictions": null,
+          "n": 138,
+          "support_recall": 1.0
+        },
+        "has_multiple_expert_alternatives": {
+          "FN": 0,
+          "FP": 34,
+          "TN": 0,
+          "TP": 51,
+          "accuracy": 0.6,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 85,
+          "support_recall": 1.0
+        },
+        "has_one_expert_alternative": {
+          "FN": 0,
+          "FP": 37,
+          "TN": 0,
+          "TP": 87,
+          "accuracy": 0.701613,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 124,
+          "support_recall": 1.0
+        },
+        "has_single_sentence_alternative": {
+          "FN": 0,
+          "FP": 68,
+          "TN": 0,
+          "TP": 127,
+          "accuracy": 0.651282,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 195,
+          "support_recall": 1.0
+        },
+        "paper_id_seen_in_train": {
+          "FN": 0,
+          "FP": 47,
+          "TN": 0,
+          "TP": 77,
+          "accuracy": 0.620968,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 124,
+          "support_recall": 1.0
+        },
+        "paper_id_unseen_in_train": {
+          "FN": 0,
+          "FP": 24,
+          "TN": 0,
+          "TP": 61,
+          "accuracy": 0.717647,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 85,
+          "support_recall": 1.0
+        },
+        "requires_multiple_gold_sentences": {
+          "FN": 0,
+          "FP": 3,
+          "TN": 0,
+          "TP": 11,
+          "accuracy": 0.785714,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 14,
+          "support_recall": 1.0
+        },
+        "same_claim_multiple_expert_papers": {
+          "FN": 0,
+          "FP": 10,
+          "TN": 0,
+          "TP": 21,
+          "accuracy": 0.677419,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 31,
+          "support_recall": 1.0
+        }
+      }
+    },
+    "oracle_min_rationale": {
+      "claim_only_word": {
+        "all": {
+          "FN": 59,
+          "FP": 51,
+          "TN": 20,
+          "TP": 79,
+          "accuracy": 0.473684,
+          "contradiction_recall": 0.28169,
+          "false_support_rate_among_contradictions": 0.71831,
+          "n": 209,
+          "support_recall": 0.572464
+        },
+        "expert_CONTRADICT": {
+          "FN": 0,
+          "FP": 51,
+          "TN": 20,
+          "TP": 0,
+          "accuracy": 0.28169,
+          "contradiction_recall": 0.28169,
+          "false_support_rate_among_contradictions": 0.71831,
+          "n": 71,
+          "support_recall": null
+        },
+        "expert_SUPPORT": {
+          "FN": 59,
+          "FP": 0,
+          "TN": 0,
+          "TP": 79,
+          "accuracy": 0.572464,
+          "contradiction_recall": null,
+          "false_support_rate_among_contradictions": null,
+          "n": 138,
+          "support_recall": 0.572464
+        },
+        "has_multiple_expert_alternatives": {
+          "FN": 26,
+          "FP": 21,
+          "TN": 13,
+          "TP": 25,
+          "accuracy": 0.447059,
+          "contradiction_recall": 0.382353,
+          "false_support_rate_among_contradictions": 0.617647,
+          "n": 85,
+          "support_recall": 0.490196
+        },
+        "has_one_expert_alternative": {
+          "FN": 33,
+          "FP": 30,
+          "TN": 7,
+          "TP": 54,
+          "accuracy": 0.491935,
+          "contradiction_recall": 0.189189,
+          "false_support_rate_among_contradictions": 0.810811,
+          "n": 124,
+          "support_recall": 0.62069
+        },
+        "has_single_sentence_alternative": {
+          "FN": 55,
+          "FP": 49,
+          "TN": 19,
+          "TP": 72,
+          "accuracy": 0.466667,
+          "contradiction_recall": 0.279412,
+          "false_support_rate_among_contradictions": 0.720588,
+          "n": 195,
+          "support_recall": 0.566929
+        },
+        "paper_id_seen_in_train": {
+          "FN": 46,
+          "FP": 35,
+          "TN": 12,
+          "TP": 31,
+          "accuracy": 0.346774,
+          "contradiction_recall": 0.255319,
+          "false_support_rate_among_contradictions": 0.744681,
+          "n": 124,
+          "support_recall": 0.402597
+        },
+        "paper_id_unseen_in_train": {
+          "FN": 13,
+          "FP": 16,
+          "TN": 8,
+          "TP": 48,
+          "accuracy": 0.658824,
+          "contradiction_recall": 0.333333,
+          "false_support_rate_among_contradictions": 0.666667,
+          "n": 85,
+          "support_recall": 0.786885
+        },
+        "requires_multiple_gold_sentences": {
+          "FN": 4,
+          "FP": 2,
+          "TN": 1,
+          "TP": 7,
+          "accuracy": 0.571429,
+          "contradiction_recall": 0.333333,
+          "false_support_rate_among_contradictions": 0.666667,
+          "n": 14,
+          "support_recall": 0.636364
+        },
+        "same_claim_multiple_expert_papers": {
+          "FN": 17,
+          "FP": 10,
+          "TN": 0,
+          "TP": 4,
+          "accuracy": 0.129032,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 31,
+          "support_recall": 0.190476
+        }
+      },
+      "evidence_only_word": {
+        "all": {
+          "FN": 66,
+          "FP": 51,
+          "TN": 20,
+          "TP": 72,
+          "accuracy": 0.440191,
+          "contradiction_recall": 0.28169,
+          "false_support_rate_among_contradictions": 0.71831,
+          "n": 209,
+          "support_recall": 0.521739
+        },
+        "expert_CONTRADICT": {
+          "FN": 0,
+          "FP": 51,
+          "TN": 20,
+          "TP": 0,
+          "accuracy": 0.28169,
+          "contradiction_recall": 0.28169,
+          "false_support_rate_among_contradictions": 0.71831,
+          "n": 71,
+          "support_recall": null
+        },
+        "expert_SUPPORT": {
+          "FN": 66,
+          "FP": 0,
+          "TN": 0,
+          "TP": 72,
+          "accuracy": 0.521739,
+          "contradiction_recall": null,
+          "false_support_rate_among_contradictions": null,
+          "n": 138,
+          "support_recall": 0.521739
+        },
+        "has_multiple_expert_alternatives": {
+          "FN": 34,
+          "FP": 25,
+          "TN": 9,
+          "TP": 17,
+          "accuracy": 0.305882,
+          "contradiction_recall": 0.264706,
+          "false_support_rate_among_contradictions": 0.735294,
+          "n": 85,
+          "support_recall": 0.333333
+        },
+        "has_one_expert_alternative": {
+          "FN": 32,
+          "FP": 26,
+          "TN": 11,
+          "TP": 55,
+          "accuracy": 0.532258,
+          "contradiction_recall": 0.297297,
+          "false_support_rate_among_contradictions": 0.702703,
+          "n": 124,
+          "support_recall": 0.632184
+        },
+        "has_single_sentence_alternative": {
+          "FN": 63,
+          "FP": 48,
+          "TN": 20,
+          "TP": 64,
+          "accuracy": 0.430769,
+          "contradiction_recall": 0.294118,
+          "false_support_rate_among_contradictions": 0.705882,
+          "n": 195,
+          "support_recall": 0.503937
+        },
+        "paper_id_seen_in_train": {
+          "FN": 53,
+          "FP": 34,
+          "TN": 13,
+          "TP": 24,
+          "accuracy": 0.298387,
+          "contradiction_recall": 0.276596,
+          "false_support_rate_among_contradictions": 0.723404,
+          "n": 124,
+          "support_recall": 0.311688
+        },
+        "paper_id_unseen_in_train": {
+          "FN": 13,
+          "FP": 17,
+          "TN": 7,
+          "TP": 48,
+          "accuracy": 0.647059,
+          "contradiction_recall": 0.291667,
+          "false_support_rate_among_contradictions": 0.708333,
+          "n": 85,
+          "support_recall": 0.786885
+        },
+        "requires_multiple_gold_sentences": {
+          "FN": 3,
+          "FP": 3,
+          "TN": 0,
+          "TP": 8,
+          "accuracy": 0.571429,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 14,
+          "support_recall": 0.727273
+        },
+        "same_claim_multiple_expert_papers": {
+          "FN": 17,
+          "FP": 8,
+          "TN": 2,
+          "TP": 4,
+          "accuracy": 0.193548,
+          "contradiction_recall": 0.2,
+          "false_support_rate_among_contradictions": 0.8,
+          "n": 31,
+          "support_recall": 0.190476
+        }
+      },
+      "joint_pair_char": {
+        "all": {
+          "FN": 58,
+          "FP": 48,
+          "TN": 23,
+          "TP": 80,
+          "accuracy": 0.492823,
+          "contradiction_recall": 0.323944,
+          "false_support_rate_among_contradictions": 0.676056,
+          "n": 209,
+          "support_recall": 0.57971
+        },
+        "expert_CONTRADICT": {
+          "FN": 0,
+          "FP": 48,
+          "TN": 23,
+          "TP": 0,
+          "accuracy": 0.323944,
+          "contradiction_recall": 0.323944,
+          "false_support_rate_among_contradictions": 0.676056,
+          "n": 71,
+          "support_recall": null
+        },
+        "expert_SUPPORT": {
+          "FN": 58,
+          "FP": 0,
+          "TN": 0,
+          "TP": 80,
+          "accuracy": 0.57971,
+          "contradiction_recall": null,
+          "false_support_rate_among_contradictions": null,
+          "n": 138,
+          "support_recall": 0.57971
+        },
+        "has_multiple_expert_alternatives": {
+          "FN": 29,
+          "FP": 19,
+          "TN": 15,
+          "TP": 22,
+          "accuracy": 0.435294,
+          "contradiction_recall": 0.441176,
+          "false_support_rate_among_contradictions": 0.558824,
+          "n": 85,
+          "support_recall": 0.431373
+        },
+        "has_one_expert_alternative": {
+          "FN": 29,
+          "FP": 29,
+          "TN": 8,
+          "TP": 58,
+          "accuracy": 0.532258,
+          "contradiction_recall": 0.216216,
+          "false_support_rate_among_contradictions": 0.783784,
+          "n": 124,
+          "support_recall": 0.666667
+        },
+        "has_single_sentence_alternative": {
+          "FN": 55,
+          "FP": 46,
+          "TN": 22,
+          "TP": 72,
+          "accuracy": 0.482051,
+          "contradiction_recall": 0.323529,
+          "false_support_rate_among_contradictions": 0.676471,
+          "n": 195,
+          "support_recall": 0.566929
+        },
+        "paper_id_seen_in_train": {
+          "FN": 49,
+          "FP": 33,
+          "TN": 14,
+          "TP": 28,
+          "accuracy": 0.33871,
+          "contradiction_recall": 0.297872,
+          "false_support_rate_among_contradictions": 0.702128,
+          "n": 124,
+          "support_recall": 0.363636
+        },
+        "paper_id_unseen_in_train": {
+          "FN": 9,
+          "FP": 15,
+          "TN": 9,
+          "TP": 52,
+          "accuracy": 0.717647,
+          "contradiction_recall": 0.375,
+          "false_support_rate_among_contradictions": 0.625,
+          "n": 85,
+          "support_recall": 0.852459
+        },
+        "requires_multiple_gold_sentences": {
+          "FN": 3,
+          "FP": 2,
+          "TN": 1,
+          "TP": 8,
+          "accuracy": 0.642857,
+          "contradiction_recall": 0.333333,
+          "false_support_rate_among_contradictions": 0.666667,
+          "n": 14,
+          "support_recall": 0.727273
+        },
+        "same_claim_multiple_expert_papers": {
+          "FN": 17,
+          "FP": 7,
+          "TN": 3,
+          "TP": 4,
+          "accuracy": 0.225806,
+          "contradiction_recall": 0.3,
+          "false_support_rate_among_contradictions": 0.7,
+          "n": 31,
+          "support_recall": 0.190476
+        }
+      },
+      "joint_pair_word": {
+        "all": {
+          "FN": 60,
+          "FP": 52,
+          "TN": 19,
+          "TP": 78,
+          "accuracy": 0.464115,
+          "contradiction_recall": 0.267606,
+          "false_support_rate_among_contradictions": 0.732394,
+          "n": 209,
+          "support_recall": 0.565217
+        },
+        "expert_CONTRADICT": {
+          "FN": 0,
+          "FP": 52,
+          "TN": 19,
+          "TP": 0,
+          "accuracy": 0.267606,
+          "contradiction_recall": 0.267606,
+          "false_support_rate_among_contradictions": 0.732394,
+          "n": 71,
+          "support_recall": null
+        },
+        "expert_SUPPORT": {
+          "FN": 60,
+          "FP": 0,
+          "TN": 0,
+          "TP": 78,
+          "accuracy": 0.565217,
+          "contradiction_recall": null,
+          "false_support_rate_among_contradictions": null,
+          "n": 138,
+          "support_recall": 0.565217
+        },
+        "has_multiple_expert_alternatives": {
+          "FN": 29,
+          "FP": 24,
+          "TN": 10,
+          "TP": 22,
+          "accuracy": 0.376471,
+          "contradiction_recall": 0.294118,
+          "false_support_rate_among_contradictions": 0.705882,
+          "n": 85,
+          "support_recall": 0.431373
+        },
+        "has_one_expert_alternative": {
+          "FN": 31,
+          "FP": 28,
+          "TN": 9,
+          "TP": 56,
+          "accuracy": 0.524194,
+          "contradiction_recall": 0.243243,
+          "false_support_rate_among_contradictions": 0.756757,
+          "n": 124,
+          "support_recall": 0.643678
+        },
+        "has_single_sentence_alternative": {
+          "FN": 57,
+          "FP": 49,
+          "TN": 19,
+          "TP": 70,
+          "accuracy": 0.45641,
+          "contradiction_recall": 0.279412,
+          "false_support_rate_among_contradictions": 0.720588,
+          "n": 195,
+          "support_recall": 0.551181
+        },
+        "paper_id_seen_in_train": {
+          "FN": 51,
+          "FP": 34,
+          "TN": 13,
+          "TP": 26,
+          "accuracy": 0.314516,
+          "contradiction_recall": 0.276596,
+          "false_support_rate_among_contradictions": 0.723404,
+          "n": 124,
+          "support_recall": 0.337662
+        },
+        "paper_id_unseen_in_train": {
+          "FN": 9,
+          "FP": 18,
+          "TN": 6,
+          "TP": 52,
+          "accuracy": 0.682353,
+          "contradiction_recall": 0.25,
+          "false_support_rate_among_contradictions": 0.75,
+          "n": 85,
+          "support_recall": 0.852459
+        },
+        "requires_multiple_gold_sentences": {
+          "FN": 3,
+          "FP": 3,
+          "TN": 0,
+          "TP": 8,
+          "accuracy": 0.571429,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 14,
+          "support_recall": 0.727273
+        },
+        "same_claim_multiple_expert_papers": {
+          "FN": 17,
+          "FP": 10,
+          "TN": 0,
+          "TP": 4,
+          "accuracy": 0.129032,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 31,
+          "support_recall": 0.190476
+        }
+      },
+      "support_prior": {
+        "all": {
+          "FN": 0,
+          "FP": 71,
+          "TN": 0,
+          "TP": 138,
+          "accuracy": 0.660287,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 209,
+          "support_recall": 1.0
+        },
+        "expert_CONTRADICT": {
+          "FN": 0,
+          "FP": 71,
+          "TN": 0,
+          "TP": 0,
+          "accuracy": 0.0,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 71,
+          "support_recall": null
+        },
+        "expert_SUPPORT": {
+          "FN": 0,
+          "FP": 0,
+          "TN": 0,
+          "TP": 138,
+          "accuracy": 1.0,
+          "contradiction_recall": null,
+          "false_support_rate_among_contradictions": null,
+          "n": 138,
+          "support_recall": 1.0
+        },
+        "has_multiple_expert_alternatives": {
+          "FN": 0,
+          "FP": 34,
+          "TN": 0,
+          "TP": 51,
+          "accuracy": 0.6,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 85,
+          "support_recall": 1.0
+        },
+        "has_one_expert_alternative": {
+          "FN": 0,
+          "FP": 37,
+          "TN": 0,
+          "TP": 87,
+          "accuracy": 0.701613,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 124,
+          "support_recall": 1.0
+        },
+        "has_single_sentence_alternative": {
+          "FN": 0,
+          "FP": 68,
+          "TN": 0,
+          "TP": 127,
+          "accuracy": 0.651282,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 195,
+          "support_recall": 1.0
+        },
+        "paper_id_seen_in_train": {
+          "FN": 0,
+          "FP": 47,
+          "TN": 0,
+          "TP": 77,
+          "accuracy": 0.620968,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 124,
+          "support_recall": 1.0
+        },
+        "paper_id_unseen_in_train": {
+          "FN": 0,
+          "FP": 24,
+          "TN": 0,
+          "TP": 61,
+          "accuracy": 0.717647,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 85,
+          "support_recall": 1.0
+        },
+        "requires_multiple_gold_sentences": {
+          "FN": 0,
+          "FP": 3,
+          "TN": 0,
+          "TP": 11,
+          "accuracy": 0.785714,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 14,
+          "support_recall": 1.0
+        },
+        "same_claim_multiple_expert_papers": {
+          "FN": 0,
+          "FP": 10,
+          "TN": 0,
+          "TP": 21,
+          "accuracy": 0.677419,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 31,
+          "support_recall": 1.0
+        }
+      }
+    },
+    "whole_abstract": {
+      "claim_only_word": {
+        "all": {
+          "FN": 59,
+          "FP": 51,
+          "TN": 20,
+          "TP": 79,
+          "accuracy": 0.473684,
+          "contradiction_recall": 0.28169,
+          "false_support_rate_among_contradictions": 0.71831,
+          "n": 209,
+          "support_recall": 0.572464
+        },
+        "expert_CONTRADICT": {
+          "FN": 0,
+          "FP": 51,
+          "TN": 20,
+          "TP": 0,
+          "accuracy": 0.28169,
+          "contradiction_recall": 0.28169,
+          "false_support_rate_among_contradictions": 0.71831,
+          "n": 71,
+          "support_recall": null
+        },
+        "expert_SUPPORT": {
+          "FN": 59,
+          "FP": 0,
+          "TN": 0,
+          "TP": 79,
+          "accuracy": 0.572464,
+          "contradiction_recall": null,
+          "false_support_rate_among_contradictions": null,
+          "n": 138,
+          "support_recall": 0.572464
+        },
+        "has_multiple_expert_alternatives": {
+          "FN": 26,
+          "FP": 21,
+          "TN": 13,
+          "TP": 25,
+          "accuracy": 0.447059,
+          "contradiction_recall": 0.382353,
+          "false_support_rate_among_contradictions": 0.617647,
+          "n": 85,
+          "support_recall": 0.490196
+        },
+        "has_one_expert_alternative": {
+          "FN": 33,
+          "FP": 30,
+          "TN": 7,
+          "TP": 54,
+          "accuracy": 0.491935,
+          "contradiction_recall": 0.189189,
+          "false_support_rate_among_contradictions": 0.810811,
+          "n": 124,
+          "support_recall": 0.62069
+        },
+        "has_single_sentence_alternative": {
+          "FN": 55,
+          "FP": 49,
+          "TN": 19,
+          "TP": 72,
+          "accuracy": 0.466667,
+          "contradiction_recall": 0.279412,
+          "false_support_rate_among_contradictions": 0.720588,
+          "n": 195,
+          "support_recall": 0.566929
+        },
+        "paper_id_seen_in_train": {
+          "FN": 46,
+          "FP": 35,
+          "TN": 12,
+          "TP": 31,
+          "accuracy": 0.346774,
+          "contradiction_recall": 0.255319,
+          "false_support_rate_among_contradictions": 0.744681,
+          "n": 124,
+          "support_recall": 0.402597
+        },
+        "paper_id_unseen_in_train": {
+          "FN": 13,
+          "FP": 16,
+          "TN": 8,
+          "TP": 48,
+          "accuracy": 0.658824,
+          "contradiction_recall": 0.333333,
+          "false_support_rate_among_contradictions": 0.666667,
+          "n": 85,
+          "support_recall": 0.786885
+        },
+        "requires_multiple_gold_sentences": {
+          "FN": 4,
+          "FP": 2,
+          "TN": 1,
+          "TP": 7,
+          "accuracy": 0.571429,
+          "contradiction_recall": 0.333333,
+          "false_support_rate_among_contradictions": 0.666667,
+          "n": 14,
+          "support_recall": 0.636364
+        },
+        "same_claim_multiple_expert_papers": {
+          "FN": 17,
+          "FP": 10,
+          "TN": 0,
+          "TP": 4,
+          "accuracy": 0.129032,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 31,
+          "support_recall": 0.190476
+        }
+      },
+      "evidence_only_word": {
+        "all": {
+          "FN": 52,
+          "FP": 50,
+          "TN": 21,
+          "TP": 86,
+          "accuracy": 0.511962,
+          "contradiction_recall": 0.295775,
+          "false_support_rate_among_contradictions": 0.704225,
+          "n": 209,
+          "support_recall": 0.623188
+        },
+        "expert_CONTRADICT": {
+          "FN": 0,
+          "FP": 50,
+          "TN": 21,
+          "TP": 0,
+          "accuracy": 0.295775,
+          "contradiction_recall": 0.295775,
+          "false_support_rate_among_contradictions": 0.704225,
+          "n": 71,
+          "support_recall": null
+        },
+        "expert_SUPPORT": {
+          "FN": 52,
+          "FP": 0,
+          "TN": 0,
+          "TP": 86,
+          "accuracy": 0.623188,
+          "contradiction_recall": null,
+          "false_support_rate_among_contradictions": null,
+          "n": 138,
+          "support_recall": 0.623188
+        },
+        "has_multiple_expert_alternatives": {
+          "FN": 30,
+          "FP": 21,
+          "TN": 13,
+          "TP": 21,
+          "accuracy": 0.4,
+          "contradiction_recall": 0.382353,
+          "false_support_rate_among_contradictions": 0.617647,
+          "n": 85,
+          "support_recall": 0.411765
+        },
+        "has_one_expert_alternative": {
+          "FN": 22,
+          "FP": 29,
+          "TN": 8,
+          "TP": 65,
+          "accuracy": 0.58871,
+          "contradiction_recall": 0.216216,
+          "false_support_rate_among_contradictions": 0.783784,
+          "n": 124,
+          "support_recall": 0.747126
+        },
+        "has_single_sentence_alternative": {
+          "FN": 50,
+          "FP": 47,
+          "TN": 21,
+          "TP": 77,
+          "accuracy": 0.502564,
+          "contradiction_recall": 0.308824,
+          "false_support_rate_among_contradictions": 0.691176,
+          "n": 195,
+          "support_recall": 0.606299
+        },
+        "paper_id_seen_in_train": {
+          "FN": 42,
+          "FP": 32,
+          "TN": 15,
+          "TP": 35,
+          "accuracy": 0.403226,
+          "contradiction_recall": 0.319149,
+          "false_support_rate_among_contradictions": 0.680851,
+          "n": 124,
+          "support_recall": 0.454545
+        },
+        "paper_id_unseen_in_train": {
+          "FN": 10,
+          "FP": 18,
+          "TN": 6,
+          "TP": 51,
+          "accuracy": 0.670588,
+          "contradiction_recall": 0.25,
+          "false_support_rate_among_contradictions": 0.75,
+          "n": 85,
+          "support_recall": 0.836066
+        },
+        "requires_multiple_gold_sentences": {
+          "FN": 2,
+          "FP": 3,
+          "TN": 0,
+          "TP": 9,
+          "accuracy": 0.642857,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 14,
+          "support_recall": 0.818182
+        },
+        "same_claim_multiple_expert_papers": {
+          "FN": 14,
+          "FP": 10,
+          "TN": 0,
+          "TP": 7,
+          "accuracy": 0.225806,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 31,
+          "support_recall": 0.333333
+        }
+      },
+      "joint_pair_char": {
+        "all": {
+          "FN": 54,
+          "FP": 48,
+          "TN": 23,
+          "TP": 84,
+          "accuracy": 0.511962,
+          "contradiction_recall": 0.323944,
+          "false_support_rate_among_contradictions": 0.676056,
+          "n": 209,
+          "support_recall": 0.608696
+        },
+        "expert_CONTRADICT": {
+          "FN": 0,
+          "FP": 48,
+          "TN": 23,
+          "TP": 0,
+          "accuracy": 0.323944,
+          "contradiction_recall": 0.323944,
+          "false_support_rate_among_contradictions": 0.676056,
+          "n": 71,
+          "support_recall": null
+        },
+        "expert_SUPPORT": {
+          "FN": 54,
+          "FP": 0,
+          "TN": 0,
+          "TP": 84,
+          "accuracy": 0.608696,
+          "contradiction_recall": null,
+          "false_support_rate_among_contradictions": null,
+          "n": 138,
+          "support_recall": 0.608696
+        },
+        "has_multiple_expert_alternatives": {
+          "FN": 31,
+          "FP": 21,
+          "TN": 13,
+          "TP": 20,
+          "accuracy": 0.388235,
+          "contradiction_recall": 0.382353,
+          "false_support_rate_among_contradictions": 0.617647,
+          "n": 85,
+          "support_recall": 0.392157
+        },
+        "has_one_expert_alternative": {
+          "FN": 23,
+          "FP": 27,
+          "TN": 10,
+          "TP": 64,
+          "accuracy": 0.596774,
+          "contradiction_recall": 0.27027,
+          "false_support_rate_among_contradictions": 0.72973,
+          "n": 124,
+          "support_recall": 0.735632
+        },
+        "has_single_sentence_alternative": {
+          "FN": 52,
+          "FP": 46,
+          "TN": 22,
+          "TP": 75,
+          "accuracy": 0.497436,
+          "contradiction_recall": 0.323529,
+          "false_support_rate_among_contradictions": 0.676471,
+          "n": 195,
+          "support_recall": 0.590551
+        },
+        "paper_id_seen_in_train": {
+          "FN": 41,
+          "FP": 33,
+          "TN": 14,
+          "TP": 36,
+          "accuracy": 0.403226,
+          "contradiction_recall": 0.297872,
+          "false_support_rate_among_contradictions": 0.702128,
+          "n": 124,
+          "support_recall": 0.467532
+        },
+        "paper_id_unseen_in_train": {
+          "FN": 13,
+          "FP": 15,
+          "TN": 9,
+          "TP": 48,
+          "accuracy": 0.670588,
+          "contradiction_recall": 0.375,
+          "false_support_rate_among_contradictions": 0.625,
+          "n": 85,
+          "support_recall": 0.786885
+        },
+        "requires_multiple_gold_sentences": {
+          "FN": 2,
+          "FP": 2,
+          "TN": 1,
+          "TP": 9,
+          "accuracy": 0.714286,
+          "contradiction_recall": 0.333333,
+          "false_support_rate_among_contradictions": 0.666667,
+          "n": 14,
+          "support_recall": 0.818182
+        },
+        "same_claim_multiple_expert_papers": {
+          "FN": 15,
+          "FP": 9,
+          "TN": 1,
+          "TP": 6,
+          "accuracy": 0.225806,
+          "contradiction_recall": 0.1,
+          "false_support_rate_among_contradictions": 0.9,
+          "n": 31,
+          "support_recall": 0.285714
+        }
+      },
+      "joint_pair_word": {
+        "all": {
+          "FN": 57,
+          "FP": 52,
+          "TN": 19,
+          "TP": 81,
+          "accuracy": 0.478469,
+          "contradiction_recall": 0.267606,
+          "false_support_rate_among_contradictions": 0.732394,
+          "n": 209,
+          "support_recall": 0.586957
+        },
+        "expert_CONTRADICT": {
+          "FN": 0,
+          "FP": 52,
+          "TN": 19,
+          "TP": 0,
+          "accuracy": 0.267606,
+          "contradiction_recall": 0.267606,
+          "false_support_rate_among_contradictions": 0.732394,
+          "n": 71,
+          "support_recall": null
+        },
+        "expert_SUPPORT": {
+          "FN": 57,
+          "FP": 0,
+          "TN": 0,
+          "TP": 81,
+          "accuracy": 0.586957,
+          "contradiction_recall": null,
+          "false_support_rate_among_contradictions": null,
+          "n": 138,
+          "support_recall": 0.586957
+        },
+        "has_multiple_expert_alternatives": {
+          "FN": 31,
+          "FP": 22,
+          "TN": 12,
+          "TP": 20,
+          "accuracy": 0.376471,
+          "contradiction_recall": 0.352941,
+          "false_support_rate_among_contradictions": 0.647059,
+          "n": 85,
+          "support_recall": 0.392157
+        },
+        "has_one_expert_alternative": {
+          "FN": 26,
+          "FP": 30,
+          "TN": 7,
+          "TP": 61,
+          "accuracy": 0.548387,
+          "contradiction_recall": 0.189189,
+          "false_support_rate_among_contradictions": 0.810811,
+          "n": 124,
+          "support_recall": 0.701149
+        },
+        "has_single_sentence_alternative": {
+          "FN": 55,
+          "FP": 49,
+          "TN": 19,
+          "TP": 72,
+          "accuracy": 0.466667,
+          "contradiction_recall": 0.279412,
+          "false_support_rate_among_contradictions": 0.720588,
+          "n": 195,
+          "support_recall": 0.566929
+        },
+        "paper_id_seen_in_train": {
+          "FN": 45,
+          "FP": 34,
+          "TN": 13,
+          "TP": 32,
+          "accuracy": 0.362903,
+          "contradiction_recall": 0.276596,
+          "false_support_rate_among_contradictions": 0.723404,
+          "n": 124,
+          "support_recall": 0.415584
+        },
+        "paper_id_unseen_in_train": {
+          "FN": 12,
+          "FP": 18,
+          "TN": 6,
+          "TP": 49,
+          "accuracy": 0.647059,
+          "contradiction_recall": 0.25,
+          "false_support_rate_among_contradictions": 0.75,
+          "n": 85,
+          "support_recall": 0.803279
+        },
+        "requires_multiple_gold_sentences": {
+          "FN": 2,
+          "FP": 3,
+          "TN": 0,
+          "TP": 9,
+          "accuracy": 0.642857,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 14,
+          "support_recall": 0.818182
+        },
+        "same_claim_multiple_expert_papers": {
+          "FN": 16,
+          "FP": 10,
+          "TN": 0,
+          "TP": 5,
+          "accuracy": 0.16129,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 31,
+          "support_recall": 0.238095
+        }
+      },
+      "support_prior": {
+        "all": {
+          "FN": 0,
+          "FP": 71,
+          "TN": 0,
+          "TP": 138,
+          "accuracy": 0.660287,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 209,
+          "support_recall": 1.0
+        },
+        "expert_CONTRADICT": {
+          "FN": 0,
+          "FP": 71,
+          "TN": 0,
+          "TP": 0,
+          "accuracy": 0.0,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 71,
+          "support_recall": null
+        },
+        "expert_SUPPORT": {
+          "FN": 0,
+          "FP": 0,
+          "TN": 0,
+          "TP": 138,
+          "accuracy": 1.0,
+          "contradiction_recall": null,
+          "false_support_rate_among_contradictions": null,
+          "n": 138,
+          "support_recall": 1.0
+        },
+        "has_multiple_expert_alternatives": {
+          "FN": 0,
+          "FP": 34,
+          "TN": 0,
+          "TP": 51,
+          "accuracy": 0.6,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 85,
+          "support_recall": 1.0
+        },
+        "has_one_expert_alternative": {
+          "FN": 0,
+          "FP": 37,
+          "TN": 0,
+          "TP": 87,
+          "accuracy": 0.701613,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 124,
+          "support_recall": 1.0
+        },
+        "has_single_sentence_alternative": {
+          "FN": 0,
+          "FP": 68,
+          "TN": 0,
+          "TP": 127,
+          "accuracy": 0.651282,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 195,
+          "support_recall": 1.0
+        },
+        "paper_id_seen_in_train": {
+          "FN": 0,
+          "FP": 47,
+          "TN": 0,
+          "TP": 77,
+          "accuracy": 0.620968,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 124,
+          "support_recall": 1.0
+        },
+        "paper_id_unseen_in_train": {
+          "FN": 0,
+          "FP": 24,
+          "TN": 0,
+          "TP": 61,
+          "accuracy": 0.717647,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 85,
+          "support_recall": 1.0
+        },
+        "requires_multiple_gold_sentences": {
+          "FN": 0,
+          "FP": 3,
+          "TN": 0,
+          "TP": 11,
+          "accuracy": 0.785714,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 14,
+          "support_recall": 1.0
+        },
+        "same_claim_multiple_expert_papers": {
+          "FN": 0,
+          "FP": 10,
+          "TN": 0,
+          "TP": 21,
+          "accuracy": 0.677419,
+          "contradiction_recall": 0.0,
+          "false_support_rate_among_contradictions": 1.0,
+          "n": 31,
+          "support_recall": 1.0
+        }
+      }
+    }
+  },
+  "protocol": "HARD_SOURCE_POLARITY_PROTOCOL_2026-10-26.md",
+  "same_claim_cross_paper_inconsistency": {
+    "bm25_top3": {
+      "claim_only_word": {
+        "claim_instances_with_multiple_papers": 10,
+        "inconsistent_claim_count": 0,
+        "inconsistent_claim_ids": []
+      },
+      "evidence_only_word": {
+        "claim_instances_with_multiple_papers": 10,
+        "inconsistent_claim_count": 3,
+        "inconsistent_claim_ids": [
+          70,
+          261,
+          597
+        ]
+      },
+      "joint_pair_char": {
+        "claim_instances_with_multiple_papers": 10,
+        "inconsistent_claim_count": 3,
+        "inconsistent_claim_ids": [
+          70,
+          261,
+          873
+        ]
+      },
+      "joint_pair_word": {
+        "claim_instances_with_multiple_papers": 10,
+        "inconsistent_claim_count": 0,
+        "inconsistent_claim_ids": []
+      },
+      "support_prior": {
+        "claim_instances_with_multiple_papers": 10,
+        "inconsistent_claim_count": 0,
+        "inconsistent_claim_ids": []
+      }
+    },
+    "bm25_top5": {
+      "claim_only_word": {
+        "claim_instances_with_multiple_papers": 10,
+        "inconsistent_claim_count": 0,
+        "inconsistent_claim_ids": []
+      },
+      "evidence_only_word": {
+        "claim_instances_with_multiple_papers": 10,
+        "inconsistent_claim_count": 3,
+        "inconsistent_claim_ids": [
+          70,
+          261,
+          597
+        ]
+      },
+      "joint_pair_char": {
+        "claim_instances_with_multiple_papers": 10,
+        "inconsistent_claim_count": 3,
+        "inconsistent_claim_ids": [
+          70,
+          261,
+          873
+        ]
+      },
+      "joint_pair_word": {
+        "claim_instances_with_multiple_papers": 10,
+        "inconsistent_claim_count": 1,
+        "inconsistent_claim_ids": [
+          70
+        ]
+      },
+      "support_prior": {
+        "claim_instances_with_multiple_papers": 10,
+        "inconsistent_claim_count": 0,
+        "inconsistent_claim_ids": []
+      }
+    },
+    "oracle_min_rationale": {
+      "claim_only_word": {
+        "claim_instances_with_multiple_papers": 10,
+        "inconsistent_claim_count": 0,
+        "inconsistent_claim_ids": []
+      },
+      "evidence_only_word": {
+        "claim_instances_with_multiple_papers": 10,
+        "inconsistent_claim_count": 4,
+        "inconsistent_claim_ids": [
+          261,
+          452,
+          597,
+          873
+        ]
+      },
+      "joint_pair_char": {
+        "claim_instances_with_multiple_papers": 10,
+        "inconsistent_claim_count": 1,
+        "inconsistent_claim_ids": [
+          873
+        ]
+      },
+      "joint_pair_word": {
+        "claim_instances_with_multiple_papers": 10,
+        "inconsistent_claim_count": 0,
+        "inconsistent_claim_ids": []
+      },
+      "support_prior": {
+        "claim_instances_with_multiple_papers": 10,
+        "inconsistent_claim_count": 0,
+        "inconsistent_claim_ids": []
+      }
+    },
+    "whole_abstract": {
+      "claim_only_word": {
+        "claim_instances_with_multiple_papers": 10,
+        "inconsistent_claim_count": 0,
+        "inconsistent_claim_ids": []
+      },
+      "evidence_only_word": {
+        "claim_instances_with_multiple_papers": 10,
+        "inconsistent_claim_count": 1,
+        "inconsistent_claim_ids": [
+          597
+        ]
+      },
+      "joint_pair_char": {
+        "claim_instances_with_multiple_papers": 10,
+        "inconsistent_claim_count": 1,
+        "inconsistent_claim_ids": [
+          873
+        ]
+      },
+      "joint_pair_word": {
+        "claim_instances_with_multiple_papers": 10,
+        "inconsistent_claim_count": 1,
+        "inconsistent_claim_ids": [
+          70
+        ]
+      },
+      "support_prior": {
+        "claim_instances_with_multiple_papers": 10,
+        "inconsistent_claim_count": 0,
+        "inconsistent_claim_ids": []
+      }
+    }
+  },
+  "source": {
+    "classifier_inference_cpu_wall": {
+      "claim_only_word/bm25_top3": {
+        "llm_calls": 0,
+        "mean_wall_milliseconds_per_pair": 0.08724,
+        "non_llm_inference_calls": 1,
+        "total_wall_seconds": 0.01823
+      },
+      "claim_only_word/bm25_top5": {
+        "llm_calls": 0,
+        "mean_wall_milliseconds_per_pair": 0.10586,
+        "non_llm_inference_calls": 1,
+        "total_wall_seconds": 0.02212
+      },
+      "claim_only_word/oracle_min_rationale": {
+        "llm_calls": 0,
+        "mean_wall_milliseconds_per_pair": 0.05929,
+        "non_llm_inference_calls": 1,
+        "total_wall_seconds": 0.01239
+      },
+      "claim_only_word/whole_abstract": {
+        "llm_calls": 0,
+        "mean_wall_milliseconds_per_pair": 0.10613,
+        "non_llm_inference_calls": 1,
+        "total_wall_seconds": 0.02218
+      },
+      "evidence_only_word/bm25_top3": {
+        "llm_calls": 0,
+        "mean_wall_milliseconds_per_pair": 0.52133,
+        "non_llm_inference_calls": 1,
+        "total_wall_seconds": 0.10896
+      },
+      "evidence_only_word/bm25_top5": {
+        "llm_calls": 0,
+        "mean_wall_milliseconds_per_pair": 3.29281,
+        "non_llm_inference_calls": 1,
+        "total_wall_seconds": 0.6882
+      },
+      "evidence_only_word/oracle_min_rationale": {
+        "llm_calls": 0,
+        "mean_wall_milliseconds_per_pair": 0.55819,
+        "non_llm_inference_calls": 1,
+        "total_wall_seconds": 0.11666
+      },
+      "evidence_only_word/whole_abstract": {
+        "llm_calls": 0,
+        "mean_wall_milliseconds_per_pair": 3.26904,
+        "non_llm_inference_calls": 1,
+        "total_wall_seconds": 0.68323
+      },
+      "joint_pair_char/bm25_top3": {
+        "llm_calls": 0,
+        "mean_wall_milliseconds_per_pair": 9.02217,
+        "non_llm_inference_calls": 1,
+        "total_wall_seconds": 1.88563
+      },
+      "joint_pair_char/bm25_top5": {
+        "llm_calls": 0,
+        "mean_wall_milliseconds_per_pair": 24.65915,
+        "non_llm_inference_calls": 1,
+        "total_wall_seconds": 5.15376
+      },
+      "joint_pair_char/oracle_min_rationale": {
+        "llm_calls": 0,
+        "mean_wall_milliseconds_per_pair": 5.61,
+        "non_llm_inference_calls": 1,
+        "total_wall_seconds": 1.17249
+      },
+      "joint_pair_char/whole_abstract": {
+        "llm_calls": 0,
+        "mean_wall_milliseconds_per_pair": 15.69204,
+        "non_llm_inference_calls": 1,
+        "total_wall_seconds": 3.27964
+      },
+      "joint_pair_word/bm25_top3": {
+        "llm_calls": 0,
+        "mean_wall_milliseconds_per_pair": 0.9204,
+        "non_llm_inference_calls": 1,
+        "total_wall_seconds": 0.19236
+      },
+      "joint_pair_word/bm25_top5": {
+        "llm_calls": 0,
+        "mean_wall_milliseconds_per_pair": 2.91101,
+        "non_llm_inference_calls": 1,
+        "total_wall_seconds": 0.6084
+      },
+      "joint_pair_word/oracle_min_rationale": {
+        "llm_calls": 0,
+        "mean_wall_milliseconds_per_pair": 1.40766,
+        "non_llm_inference_calls": 1,
+        "total_wall_seconds": 0.2942
+      },
+      "joint_pair_word/whole_abstract": {
+        "llm_calls": 0,
+        "mean_wall_milliseconds_per_pair": 5.84358,
+        "non_llm_inference_calls": 1,
+        "total_wall_seconds": 1.22131
+      },
+      "support_prior/bm25_top3": {
+        "llm_calls": 0,
+        "mean_wall_milliseconds_per_pair": 2e-05,
+        "non_llm_inference_calls": 0,
+        "total_wall_seconds": 0.0
+      },
+      "support_prior/bm25_top5": {
+        "llm_calls": 0,
+        "mean_wall_milliseconds_per_pair": 7e-05,
+        "non_llm_inference_calls": 0,
+        "total_wall_seconds": 1e-05
+      },
+      "support_prior/oracle_min_rationale": {
+        "llm_calls": 0,
+        "mean_wall_milliseconds_per_pair": 4e-05,
+        "non_llm_inference_calls": 0,
+        "total_wall_seconds": 1e-05
+      },
+      "support_prior/whole_abstract": {
+        "llm_calls": 0,
+        "mean_wall_milliseconds_per_pair": 4e-05,
+        "non_llm_inference_calls": 0,
+        "total_wall_seconds": 1e-05
+      }
+    },
+    "classifier_training_cpu_wall": {
+      "claim_only_word": {
+        "feature_count": 2231,
+        "train_nnz": 9195,
+        "training_pairs": 564,
+        "training_seconds": 0.3546
+      },
+      "evidence_only_word": {
+        "feature_count": 5921,
+        "train_nnz": 24909,
+        "training_pairs": 564,
+        "training_seconds": 0.41321
+      },
+      "joint_pair_char": {
+        "feature_count": 24732,
+        "train_nnz": 292760,
+        "training_pairs": 564,
+        "training_seconds": 4.5016
+      },
+      "joint_pair_word": {
+        "feature_count": 7673,
+        "train_nnz": 34679,
+        "training_pairs": 564,
+        "training_seconds": 0.29277
+      },
+      "support_prior": {
+        "feature_count": 0,
+        "training_pairs": 0,
+        "training_seconds": 0.0
+      }
+    },
+    "doc_id_overlap_pairs": 124,
+    "evaluation_labeled_pairs": 209,
+    "evaluation_unique_original_claims": 188,
+    "gpu_used_by_this_experiment": false,
+    "heldout_expert_contradict_pairs": 71,
+    "heldout_expert_support_pairs": 138,
+    "llm_inference_calls": 0,
+    "maxrss_linux_kib": 327212,
+    "multi_premise_original_pairs": 14,
+    "multiple_rationale_original_pairs": 85,
+    "original_archive_sha256": "11c621288d41ac144d29b13b0f8503b3820b7d6e8b1f6ff24dff335c196d76be",
+    "original_bm25_archive_sha256": "0e0f797b9cafdd0abb7a15ff06b898b9ad8ef4d15bdf4f22ec609831872a076e",
+    "same_claim_multiple_original_papers": 31,
+    "source_contexts": {
+      "bm25_top3": {
+        "average_source_chars": 556.95,
+        "average_whitespace_source_words_not_model_tokens": 78.87,
+        "complete_expert_rationale": 168,
+        "complete_expert_rationale_contradict": 56,
+        "complete_expert_rationale_support": 112,
+        "median_source_chars": 532,
+        "pairs": 209
+      },
+      "bm25_top5": {
+        "average_source_chars": 899.23,
+        "average_whitespace_source_words_not_model_tokens": 127.92,
+        "complete_expert_rationale": 185,
+        "complete_expert_rationale_contradict": 62,
+        "complete_expert_rationale_support": 123,
+        "median_source_chars": 889,
+        "pairs": 209
+      },
+      "oracle_min_rationale": {
+        "average_source_chars": 230.65,
+        "average_whitespace_source_words_not_model_tokens": 32.94,
+        "complete_expert_rationale": 209,
+        "complete_expert_rationale_contradict": 71,
+        "complete_expert_rationale_support": 138,
+        "median_source_chars": 201,
+        "pairs": 209
+      },
+      "whole_abstract": {
+        "average_source_chars": 1630.78,
+        "average_whitespace_source_words_not_model_tokens": 235.43,
+        "complete_expert_rationale": 209,
+        "complete_expert_rationale_contradict": 71,
+        "complete_expert_rationale_support": 138,
+        "median_source_chars": 1363,
+        "pairs": 209
+      }
+    },
+    "source_text_exported_to_git": false,
+    "source_type": "human_scientific_evidence_claim_pair_not_real_swaag_agent_task",
+    "total_experiment_wall_seconds": 22.80056,
+    "train_claim_overlap_removed": [
+      871,
+      1291
+    ],
+    "training_labeled_pairs": 564,
+    "training_unique_original_claims": 505
+  },
+  "version": "swaag-independent-scifact-polarity-hard-source-v1-20261026"
+}
