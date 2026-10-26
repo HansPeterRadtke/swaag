@@ -12,6 +12,7 @@ from swaag.tools.shared_knowledge import SHARED_KNOWLEDGE_TOOLS
 from swaag.tools.agent_workspace import AGENT_WORKSPACE_TOOLS
 from swaag.tools.artifacts import ARTIFACT_TOOLS
 from swaag.tools.attachments import ATTACHMENT_TOOLS
+from swaag.tools.verified_snapshots import VERIFIED_SNAPSHOT_TOOLS
 from swaag.tools.builtin import BUILTIN_TOOLS
 from swaag.tools.history import HISTORY_TOOLS
 from swaag.tools.prompt_instructions import PROMPT_INSTRUCTION_TOOLS
@@ -107,6 +108,7 @@ class ToolRegistry:
             *SHARED_STATE_TOOLS,
             *ARTIFACT_TOOLS,
             *ATTACHMENT_TOOLS,
+            *VERIFIED_SNAPSHOT_TOOLS,
             *TERMINAL_TOOLS,
             *CONTROL_TOOLS,
             *ORCHESTRATION_TOOLS,

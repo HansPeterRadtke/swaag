@@ -1,0 +1,137 @@
+{
+  "actual_research_goal": "Complete real source-to-target tool workflow for original captured Android PNGs through SWAAG attachment persistence, direct tool dispatch, saved history, fresh process and archive/reentry; not a live production GUI acceptance",
+  "date": "2026-10-27",
+  "durable_storage": "Three entirely isolated test sessions in SWAAG SQLite+hash-chain journals, two attachment_added sources per session, tool_result persisted before restart, explicit missing-capability refusal on new runtime, separate host source rebind, second real result, archived journals and actual restored source attachment references",
+  "first_runtime_execution_SHA256": "8af4734ed2c4c63c962b8b99b19a130752f3af0f509a85c585b8ca619ccda4fe",
+  "model_inference_or_gpu_call": false,
+  "negative_and_boundary_controls": {
+    "missing_capability_after_fresh_process": "No tool_result, explicit runtime error; no impersonation of saved attestation",
+    "new_tool_only_accepts_originalPNG_mime_and_matching_attested_IHDR_dimensions": "True",
+    "session_archive_reentry_verified": "True",
+    "source_actor_source_revision_and_native_end_dimensions_checked": "True",
+    "source_rev_and_artifact_hash_mismatches": "REVIEW in six new unit tests; no arbitrary model-supplied attestation",
+    "wrong_activity_same_app_original_author_source_1080p": "REVIEW, not automatic visual FAIL"
+  },
+  "new_opt_in_host_only_capability": "immutable_snapshot_attestor",
+  "new_registered_tool": "verify_immutable_snapshot",
+  "original_screenshot_source_release_SHA256": "0586b29f82590636806e7dd05a45e6933d46286318a52e444cee4241fb785ca7",
+  "pinned_source_manifest_SHA256": "0e0d8b33d19c32cc28558be69b0e3b1c59172e9e242627e41dd7b55f0e070517",
+  "real_source_to_target_end_state_results": {
+    "changed": {
+      "actual_user_visible_PNG_source_sha256": "129559e793620202e836d5eaa487eba93efcb65ea6e4e9a6cf05798c37b3d1bb",
+      "archive_reentry_kept_attachments": true,
+      "first_real_runtime_tool_verdict": "fail",
+      "not_general_Graphics_GUI_visual_quality_verdict": true,
+      "original_author_output_source_state_sha256": "1d8f8447bd76e11867e90b8ff45daf052b155a97552e48f365133f1f64d2c386",
+      "original_first_tool_result_event_SHA256": "c56280fb240c6758332b14894f520dd4c59f8282a606bb701d665a5507a08abc",
+      "original_tool_dispatch_wall_s": 0.1741,
+      "persisted_result_event_count": 2,
+      "raw_png_decode_wall_seconds": [
+        0.317,
+        0.315
+      ],
+      "rebound_tool_result_event_SHA256": "902cb90c023a31b3ccd2dd63f559640cba62cb2aaed3a109f0fc2d14df925a27",
+      "restarted_runtime_verdict": "fail",
+      "saved_journal_archive_event_count": 15,
+      "session_id_SHA256": "26b5ba8ba3d5df674ed98e165922face57318865b90873a4c29739cc37646c44",
+      "source_attestor_missing_after_restart_refused": true,
+      "source_image_native_size_wh": [
+        1600,
+        720
+      ],
+      "source_original_state_from_pinned_author": "io.nekohasekai.sagernet.ui.profile.BrookSettingsActivity",
+      "target_image_native_size_wh": [
+        1600,
+        720
+      ],
+      "target_original_state_from_pinned_author": "io.nekohasekai.sagernet.ui.profile.BrookSettingsActivity",
+      "trusted_original_manifest_content_SHA": "0e0d8b33d19c32cc28558be69b0e3b1c59172e9e242627e41dd7b55f0e070517"
+    },
+    "clean": {
+      "actual_user_visible_PNG_source_sha256": "1d8f8447bd76e11867e90b8ff45daf052b155a97552e48f365133f1f64d2c386",
+      "archive_reentry_kept_attachments": true,
+      "first_real_runtime_tool_verdict": "pass",
+      "not_general_Graphics_GUI_visual_quality_verdict": true,
+      "original_author_output_source_state_sha256": "1d8f8447bd76e11867e90b8ff45daf052b155a97552e48f365133f1f64d2c386",
+      "original_first_tool_result_event_SHA256": "9c0000c36b6e6ab19ded57f222f57b8dd3e7dcd3bf5d5650e9bc55d58e91e4eb",
+      "original_tool_dispatch_wall_s": 0.1493,
+      "persisted_result_event_count": 2,
+      "raw_png_decode_wall_seconds": [
+        0.278,
+        0.495
+      ],
+      "rebound_tool_result_event_SHA256": "b206f7a0bc390a1decf05b702b557ed3793eab60dba96c2291e2a42ae040242b",
+      "restarted_runtime_verdict": "pass",
+      "saved_journal_archive_event_count": 15,
+      "session_id_SHA256": "19fa7ad2a3e49784b08a276a19ec9d821c5682cd3383e324b4bbf9f654ee37b4",
+      "source_attestor_missing_after_restart_refused": true,
+      "source_image_native_size_wh": [
+        1600,
+        720
+      ],
+      "source_original_state_from_pinned_author": "io.nekohasekai.sagernet.ui.profile.BrookSettingsActivity",
+      "target_image_native_size_wh": [
+        1600,
+        720
+      ],
+      "target_original_state_from_pinned_author": "io.nekohasekai.sagernet.ui.profile.BrookSettingsActivity",
+      "trusted_original_manifest_content_SHA": "0e0d8b33d19c32cc28558be69b0e3b1c59172e9e242627e41dd7b55f0e070517"
+    },
+    "wrong_activity": {
+      "actual_user_visible_PNG_source_sha256": "62ee836788c082463573890376f6d9fe22f8d135e41305c1b408ec08af928467",
+      "archive_reentry_kept_attachments": true,
+      "first_real_runtime_tool_verdict": "review",
+      "not_general_Graphics_GUI_visual_quality_verdict": true,
+      "original_author_output_source_state_sha256": "53c8774f766736ad45e9871bba3843afe1595265c2cce2f95dfba91815963382",
+      "original_first_tool_result_event_SHA256": "ac663576abd58fd0875665fa0d1ccffbad915556c3cfdeccf461a7fd987f6c0e",
+      "original_tool_dispatch_wall_s": 0.1855,
+      "persisted_result_event_count": 2,
+      "raw_png_decode_wall_seconds": [
+        0.406,
+        0.285
+      ],
+      "rebound_tool_result_event_SHA256": "988d9dd86a9ee148305255ee3cfa0e8bcfe3690529679dc38d5c512610a73957",
+      "restarted_runtime_verdict": "review",
+      "saved_journal_archive_event_count": 15,
+      "session_id_SHA256": "6dfaa28e46d9c0e9d1bfb62f841034a82abea06a0a8082e4e9fa6f6eb51d37ca",
+      "source_attestor_missing_after_restart_refused": true,
+      "source_image_native_size_wh": [
+        720,
+        1600
+      ],
+      "source_original_state_from_pinned_author": "org.strongswan.android.ui.MainActivity",
+      "target_image_native_size_wh": [
+        720,
+        1600
+      ],
+      "target_original_state_from_pinned_author": "org.strongswan.android.ui.RemediationInstructionsActivity",
+      "trusted_original_manifest_content_SHA": "0e0d8b33d19c32cc28558be69b0e3b1c59172e9e242627e41dd7b55f0e070517"
+    }
+  },
+  "resource": {
+    "active_GPU_models_unchanged": true,
+    "all_initial_calls_wall_s": 3.315,
+    "input_original_images_decoder": "actual ffmpeg PNG decoder, each genuine public Android PNG was decoded (not just header/filename)",
+    "isolated_SQLite_amalgamation_3540100_SHA256": "0c657666d819f261cc4007526ad57e1669de9949df7a8ea847aa284a2bf0ee52",
+    "local_SWAAG_runtime_venv_not_system_or_production": true,
+    "runtime_tool_s_max": 0.1855,
+    "runtime_tool_s_median": 0.1741,
+    "runtime_tool_s_min": 0.1493,
+    "separate_process_recovery_wall_s": 2.012,
+    "sqlite_runtime_version": "3.54.1",
+    "tested_under_Nitro_contention_not_a_general_latency_guarantee": true
+  },
+  "scope_and_unproved": [
+    "Genuine captured Android GUI PNGs, but source-author mutations rather than a live Android device render. No independent human re-rating of clipped content.",
+    "Attestation is trusted because a private RESEARCH host harness pins publisher metadata; no authenticated, continuously observed Android Activity has been integrated.",
+    "The production default registered tool list does not enable this opt-in tool; no production SWAAG worker or LLM prompt-driven call was invoked.",
+    "Exact byte equality is only a valid contract for immutable screenshots, not dynamic UI, contrast, semantic overlaps, arrowhead directions or human visual acceptance.",
+    "Final 3D photorealism, naturally occurring temporal faults, true audio/video alignment and source-certified mechanical part completeness remain unqualified.",
+    "One earlier storyboard transfer was denied and not retried; no production assets, active sessions or shared GPU services were changed."
+  ],
+  "separate_restarted_recovery_SHA256": "3690e43af319c39b8f958c5b5a01c8306028a813b2cf7d7ff071db162fdde4f7",
+  "status": "PARTIAL",
+  "tool_default_disabled_and_host_capability_required": true,
+  "tool_registered_in_real_SWAAG_ToolRegistry": true,
+  "verified_host_manifest_forgery_limit": "The research harness reconstructs public source identity from a pinned publisher file manifest, not a live Android Activity or authenticated runtime screen capture. Host capability is in-memory and must be trusted/rebound; the tool does not certify any untrusted caller flags."
+}
