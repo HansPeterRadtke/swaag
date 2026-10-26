@@ -1,0 +1,295 @@
+{
+  "browser_user_facing": {
+    "clean_reencoded": {
+      "browser_media_error": null,
+      "browser_playback_success": true,
+      "browser_video_endpoint_seconds": 14,
+      "browser_wall_time_s": 17.37,
+      "source_sequence_fidelity_fault_flags": 0,
+      "source_video_SHA": "af88d6713109c7d3d3bdd16fd00b01b9c4cd301f37af88cf30a2c07146b269dc"
+    },
+    "short_reversals": {
+      "browser_media_error": null,
+      "browser_playback_success": true,
+      "browser_video_endpoint_seconds": 14,
+      "browser_wall_time_s": 15.516,
+      "source_sequence_fidelity_fault_flags": 6,
+      "source_video_SHA": "3e16396559fa327d729cfc59847e3a7d1f9eafcbecc6871ab37b70e408c313c5"
+    }
+  },
+  "cases": {
+    "clean_reencoded": {
+      "FFmpeg_freezedetect_events_start_s": [
+        11.0
+      ],
+      "FFmpeg_freezedetect_intended_last_hold_event": 1,
+      "FFmpeg_freezedetect_unintended_moving_region_events": 0,
+      "Gold_from_script_not_human": true,
+      "last_45_frame_camera_hold_gray_motion_median": 0.00117,
+      "latency": {
+        "FFmpeg_freezedetect_wall_s": 5.379,
+        "ffprobe_pts_wall_s": 4.395,
+        "native_frame_decode_plus_both_candidate_rules_wall_s": 6.869
+      },
+      "median_native_source_comparison_PSNR_dB": 40.717,
+      "min_native_source_comparison_PSNR_dB": 36.8572,
+      "no_reference_low_motion_confusion": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 210,
+        "TP": 0
+      },
+      "no_reference_predicted_frame_indices": [],
+      "script_known_altered_frames_1based": [],
+      "source_bound_confusion": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 210,
+        "TP": 0
+      },
+      "source_bound_predicted_frame_indices": [],
+      "timebase": {
+        "count": 210,
+        "max_target_pts_error_s": 3.333333342681044e-07,
+        "nonmonotonic": 0,
+        "seconds": 4.395
+      },
+      "video_SHA256": "af88d6713109c7d3d3bdd16fd00b01b9c4cd301f37af88cf30a2c07146b269dc"
+    },
+    "short_reversals": {
+      "FFmpeg_freezedetect_events_start_s": [
+        11.0
+      ],
+      "FFmpeg_freezedetect_intended_last_hold_event": 1,
+      "FFmpeg_freezedetect_unintended_moving_region_events": 0,
+      "Gold_from_script_not_human": true,
+      "last_45_frame_camera_hold_gray_motion_median": 0.00105,
+      "latency": {
+        "FFmpeg_freezedetect_wall_s": 5.003,
+        "ffprobe_pts_wall_s": 4.5,
+        "native_frame_decode_plus_both_candidate_rules_wall_s": 6.378
+      },
+      "median_native_source_comparison_PSNR_dB": 40.631,
+      "min_native_source_comparison_PSNR_dB": 11.8358,
+      "no_reference_low_motion_confusion": {
+        "FN": 6,
+        "FP": 0,
+        "TN": 204,
+        "TP": 0
+      },
+      "no_reference_predicted_frame_indices": [],
+      "script_known_altered_frames_1based": [
+        55,
+        56,
+        105,
+        106,
+        150,
+        151
+      ],
+      "source_bound_confusion": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 204,
+        "TP": 6
+      },
+      "source_bound_predicted_frame_indices": [
+        55,
+        56,
+        105,
+        106,
+        150,
+        151
+      ],
+      "timebase": {
+        "count": 210,
+        "max_target_pts_error_s": 3.333333342681044e-07,
+        "nonmonotonic": 0,
+        "seconds": 4.5
+      },
+      "video_SHA256": "3e16396559fa327d729cfc59847e3a7d1f9eafcbecc6871ab37b70e408c313c5"
+    },
+    "single_frame_holds": {
+      "FFmpeg_freezedetect_events_start_s": [
+        2.53333,
+        5.93333,
+        9.53333,
+        11.0
+      ],
+      "FFmpeg_freezedetect_intended_last_hold_event": 1,
+      "FFmpeg_freezedetect_unintended_moving_region_events": 3,
+      "Gold_from_script_not_human": true,
+      "last_45_frame_camera_hold_gray_motion_median": 0.0013,
+      "latency": {
+        "FFmpeg_freezedetect_wall_s": 5.039,
+        "ffprobe_pts_wall_s": 4.177,
+        "native_frame_decode_plus_both_candidate_rules_wall_s": 6.756
+      },
+      "median_native_source_comparison_PSNR_dB": 40.671,
+      "min_native_source_comparison_PSNR_dB": 15.3185,
+      "no_reference_low_motion_confusion": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 207,
+        "TP": 3
+      },
+      "no_reference_predicted_frame_indices": [
+        40,
+        91,
+        145
+      ],
+      "script_known_altered_frames_1based": [
+        40,
+        91,
+        145
+      ],
+      "source_bound_confusion": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 207,
+        "TP": 3
+      },
+      "source_bound_predicted_frame_indices": [
+        40,
+        91,
+        145
+      ],
+      "timebase": {
+        "count": 210,
+        "max_target_pts_error_s": 3.333333342681044e-07,
+        "nonmonotonic": 0,
+        "seconds": 4.177
+      },
+      "video_SHA256": "c34b5fb1032eb77a7618863534d380b33a5d11f668d6a81eda6012faee3710b2"
+    }
+  },
+  "date": "2026-10-26",
+  "frozen_SHA256": {
+    "browser_faulted_video_and_clean_control_20261026.json": "7c43b5c44b812ed547fd50a867b2d8d378e0e8847369af60e8ba6bc7c6fdad64",
+    "encodes.json": "f5bff2b6bf95542d75fa41d9b6562fd1d7cfe4df929135d5f4941d793b1728a3",
+    "final_video_fault_score.json": "e11492fb013f29ecdee372f7a8dd09701686b6492946e75aace0cebb9c5f9b6e",
+    "frozen_design.json": "935196c06091265d70dffb95ed244c3e197df75467eb591a877592abd2f7bfff",
+    "source_attested_policy_replay_20261026.json": "a2be5df12bf867cff96d8d2d22c8653578a4577594d1a5e135dec1a064ee389f",
+    "source_frames.json": "1995e197328b46cf6aa943876ecf78d3a074b40f9f783b5b2cf481d85b37b3b8",
+    "source_receipts.json": "3296a21ed75e5f412ea97f83630c668b3af6d0b118053a46a7631b2c90fc3847"
+  },
+  "limitations": [
+    "Synthetic frame edits created by fixed independent script on REAL approved owner video; NOT independent external human-labeled natural defects",
+    "Frames from same video are highly correlated; 9 positives and 621 negatives cannot be interpreted as 630 independent production videos or real-world error-rate confidence intervals",
+    "Source-bound PSNR checks a predefined ordered frame sequence tolerance, not subjective motion correctness or video quality across unknown edits",
+    "No-reference early low-motion rule intentionally exempted author-approved camera hold by source policy. Without that policy the final hold creates false alerts",
+    "Even deliberately altered film reaches HTML5 ended; playback success and normal PTS cannot certify user-perceived correctness",
+    "Original film has no audio track and cannot validate AV synchronization",
+    "No live SWAAG registered tool invocation. Policy evaluation uses actual source-attested evidence offline.",
+    "No production media, 3D render, gallery, model service or previously denied retrieval modified or retried."
+  ],
+  "methods": {
+    "FFmpeg_freezedetect_minus50dB_0p12s": {
+      "flagged_approved_camera_hold_per_video": 1,
+      "reversal_events_detected": 0,
+      "temporal_edited_stall_events_detected": 3
+    },
+    "no_reference_low_motion_under1_bounded_early": {
+      "FN": 6,
+      "FP": 0,
+      "TN": 621,
+      "TP": 3
+    },
+    "reference_based_PSNR_28dB": {
+      "FN": 0,
+      "FP": 0,
+      "TN": 621,
+      "TP": 9
+    }
+  },
+  "original_goal_audit": [
+    {
+      "measured": "UI-like human-reviewed SlideAudit OCR clipping 58/82 TP and 26/82 FP; new triple-unanimous-negative original slides OCR flags 26/72, generic CLIP flags 66/72",
+      "missing": "independently human-rated real native owner applications with true dynamic controls and source/output identity",
+      "question": "Exact GUI clipping, overlap, text contrast, OCR",
+      "status": "PARTIAL"
+    },
+    {
+      "measured": "TopoBench uniquely OCR-grounded 198 of 966 source edges; 151 detected, 158 false links; directions 80/147 correctly guessed without arrowheads",
+      "missing": "independently verified actually drawn arrowheads, source graph-to-pixel correspondence and heldout direction scores",
+      "question": "Exact diagrams: source graph/labels/visible directional arrows",
+      "status": "PARTIAL"
+    },
+    {
+      "measured": "owner v44 0/72 steel-to-rack two-end contacts vs corrected v47 72/72, one correlated engineered source; 119 generated GLBs AABB 9/33 missing part TP,20/86 FP",
+      "missing": "engineering-certified unrelated assemblies; independent finished-owner-render part/photorealism ratings",
+      "question": "Real 3D mesh instances, industrial part completeness, support/contact",
+      "status": "PARTIAL"
+    },
+    {
+      "measured": "original approved silent warehouse 210/210 decoded frames, 15fps PTS, source PSNR min33.28dB and median35.70dB, native Firefox reached ended 14s; intended 3s camera hold",
+      "missing": "human quality and physics judgments cannot be inferred from source-frame similarity",
+      "question": "Final encoded user-facing output and authorized camera hold",
+      "status": "NARROW_PASS"
+    },
+    {
+      "measured": "this study 9 scripted frame faults in actual warehouse MP4: source detector 9/9 TP, 0/621 FP; no-ref low motion 3/9 TP; FFmpeg flags true approved tail in all 3 videos",
+      "missing": "time-coded naturally occurring independent-human/expert video fault labels, different products/codecs and latency on production hardware",
+      "question": "Temporal video faults, false alarms, source-vs-no-source",
+      "status": "NARROW_PASS_ON_SCRIPTED_FAULTS"
+    },
+    {
+      "measured": "approved source movie has no audio stream; source archive and browser playback cannot establish actual audio event alignment",
+      "missing": "recorded real audiovisual event-timed independent audio/video ground truth",
+      "question": "Audio events and A/V synchronization in complete captured gameplay/movie",
+      "status": "UNVERIFIED"
+    },
+    {
+      "measured": "existing conservative property policy applied offline to exact encoded video receipts: clean PASS and 2 altered FAIL; 3/3 visual or FFmpeg proposals remain REVIEW",
+      "missing": "true live SWAAG registered tool call, permission/version binding and user-facing error/review behavior",
+      "question": "SWAAG live agent toolkit and source-backed release gate",
+      "status": "OFFLINE_VERIFIED_ONLY"
+    }
+  ],
+  "policy_offline": {
+    "clean_reencoded": {
+      "ffmpeg_tail_verdict": "review",
+      "source_verified_verdict": "pass",
+      "unverified_motion_verdict": "review"
+    },
+    "short_reversals": {
+      "ffmpeg_tail_verdict": "review",
+      "source_verified_verdict": "fail",
+      "unverified_motion_verdict": "review"
+    },
+    "single_frame_holds": {
+      "ffmpeg_tail_verdict": "review",
+      "source_verified_verdict": "fail",
+      "unverified_motion_verdict": "review"
+    }
+  },
+  "positive_scripted_frames": 9,
+  "prior_real_final_video_source_210_Sources_verified": true,
+  "resources": {
+    "GPU_used": false,
+    "full_total_includes_extra_process_overhead_unmeasured": true,
+    "measured_scoring_wall_sum_s": 61.37,
+    "new_video_H264_encode_wall_s_each": {
+      "clean_reencoded": 43.026,
+      "short_reversals": 56.12,
+      "single_frame_holds": 38.251
+    },
+    "original_video_to_lossless_PNG_decode_wall_s": 30.926,
+    "source_bound_and_no_reference_methods_share_frame_decode": true,
+    "source_original_PNG_verify_and_load_s": 12.874,
+    "three_new_video_H264_encode_wall_total_s": 137.397,
+    "three_video_ffprobe_PTS_wall_s": 13.072,
+    "three_video_native_frame_decode_and_same_budget_metrics_wall_s": 20.003,
+    "three_video_official_FFmpeg_freezedetect_wall_s": 15.421,
+    "time_to_conduct_browser_viewer_2_videos_s": 32.886
+  },
+  "source": "Actual original final owner-approved 210-frame v47 silent warehouse MP4, not fabricated synthetic image or metadata-only test",
+  "source_3D_blend_original_SHA": "6609f09ac0637dd232539f7d5de49ce3e59dc477a5bf25beb125ddcbf73849b6",
+  "source_authorized_final_hold_frames_1based": [
+    166,
+    210
+  ],
+  "source_checked_frame_population_total": 630,
+  "source_video_original_SHA": "e2ef866ec79318a6b3812865a51922141ad02be66b555900da311171f49b4adb",
+  "status": "PARTIAL",
+  "variant_count": 3
+}
