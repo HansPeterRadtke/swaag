@@ -1,0 +1,695 @@
+{
+  "independent_label_scope": "Expert support or contradiction for original SciFact claim/paper pair; not true-negative unrelated documents or SWAAG worker effects.",
+  "limitations": [
+    "This is actual measured CPU lexical-model inference over exact source claim/paper cases, not Qwen model review or installed SWAAG production trajectories.",
+    "The dev split has previous research usage and 124/209 paper IDs also exist in training; independent human gold is valid but not a novel untouched split.",
+    "Original scientific labels describe source-specific entailment relations, not truth of the scientific claim globally.",
+    "No clinical or scientific answer should be deployed from these low-performing exploratory baselines; an abstention is unresolved, not a correct answer.",
+    "Model raw output 0.4..0.6 thresholds are heuristics, not calibrated uncertainty or a verified source-based grader.",
+    "Pretrained weights are learned using original source expert rationale oracle; real retrieval and paper choice remain separate unvalidated costs.",
+    "Source-whitespace words are not actual Qwen tokens and CPU work does not estimate GPU contention."
+  ],
+  "policy_definitions_fixed_before_running": "SOURCE_AUTHORITY_REVIEW_POLICY_PROTOCOL_2026-10-26.md",
+  "resource_costs": {
+    "actual_gpu_vram_attributable_to_calls": null,
+    "actual_qwen_llm_calls": 0,
+    "all_cpu_classifier_calls": 2337,
+    "classification_total_wall_seconds_including_preprocessing": 17.9037,
+    "classifier_training_wall_seconds": {
+      "joint_pair_char": 1.40128,
+      "joint_pair_word": 0.28868
+    },
+    "no_external_action_effects": true,
+    "peak_resident_memory_kib": 332500,
+    "source_load_and_hash_seconds": 0.77785
+  },
+  "results": {
+    "one_char_top3": {
+      "ABSTAIN_NEGATIVE": 0,
+      "ABSTAIN_POSITIVE": 0,
+      "FN": 63,
+      "FP": 50,
+      "TN": 21,
+      "TP": 75,
+      "abstained_total": 0,
+      "correct_decisive_total": 96,
+      "correct_decisive_with_complete_rationale_present": 77,
+      "correct_decisive_without_complete_rationale_present": 19,
+      "correct_fraction_of_all_pairs_not_crediting_abstention": 0.45933,
+      "correct_fraction_when_decisive": 0.45933,
+      "decisive_coverage": 1.0,
+      "decisive_total": 209,
+      "error_fraction_of_all_pairs_not_crediting_abstention": 0.54067,
+      "false_contradiction_fraction_of_all_supports": 0.456522,
+      "false_support_fraction_of_all_contradictions": 0.704225,
+      "incorrect_decisive_total": 113,
+      "measured_cpu_model_call_wall_milliseconds_total": 1480.6772,
+      "measured_cpu_policy_wall_milliseconds_total": 1493.1589,
+      "median_full_policy_cpu_wall_milliseconds_per_case": 3.8906,
+      "model_inference_calls_by_type": {
+        "char": 209
+      },
+      "model_inference_calls_total": 209,
+      "model_input_whitespace_word_proxy_total_including_claim": 19480,
+      "n_original_claim_paper_pairs": 209,
+      "n_unique_original_claim_ids": 188,
+      "source_characters_reprocessed_across_calls": 116403,
+      "source_expert_CONTRADICT_pairs": 71,
+      "source_expert_SUPPORT_pairs": 138,
+      "source_whitespace_words_reprocessed_across_calls": 16484
+    },
+    "one_word_abstain_uncertain": {
+      "ABSTAIN_NEGATIVE": 45,
+      "ABSTAIN_POSITIVE": 70,
+      "FN": 23,
+      "FP": 24,
+      "TN": 2,
+      "TP": 45,
+      "abstained_total": 115,
+      "correct_decisive_total": 47,
+      "correct_decisive_with_complete_rationale_present": 40,
+      "correct_decisive_without_complete_rationale_present": 7,
+      "correct_fraction_of_all_pairs_not_crediting_abstention": 0.22488,
+      "correct_fraction_when_decisive": 0.5,
+      "decisive_coverage": 0.449761,
+      "decisive_total": 94,
+      "error_fraction_of_all_pairs_not_crediting_abstention": 0.22488,
+      "false_contradiction_fraction_of_all_supports": 0.166667,
+      "false_support_fraction_of_all_contradictions": 0.338028,
+      "incorrect_decisive_total": 47,
+      "measured_cpu_model_call_wall_milliseconds_total": 454.0878,
+      "measured_cpu_policy_wall_milliseconds_total": 465.6292,
+      "median_full_policy_cpu_wall_milliseconds_per_case": 1.604,
+      "model_inference_calls_by_type": {
+        "word": 209
+      },
+      "model_inference_calls_total": 209,
+      "model_input_whitespace_word_proxy_total_including_claim": 19480,
+      "n_original_claim_paper_pairs": 209,
+      "n_unique_original_claim_ids": 188,
+      "source_characters_reprocessed_across_calls": 116403,
+      "source_expert_CONTRADICT_pairs": 71,
+      "source_expert_SUPPORT_pairs": 138,
+      "source_whitespace_words_reprocessed_across_calls": 16484
+    },
+    "one_word_full": {
+      "ABSTAIN_NEGATIVE": 0,
+      "ABSTAIN_POSITIVE": 0,
+      "FN": 57,
+      "FP": 52,
+      "TN": 19,
+      "TP": 81,
+      "abstained_total": 0,
+      "correct_decisive_total": 100,
+      "correct_decisive_with_complete_rationale_present": 100,
+      "correct_decisive_without_complete_rationale_present": 0,
+      "correct_fraction_of_all_pairs_not_crediting_abstention": 0.478469,
+      "correct_fraction_when_decisive": 0.478469,
+      "decisive_coverage": 1.0,
+      "decisive_total": 209,
+      "error_fraction_of_all_pairs_not_crediting_abstention": 0.521531,
+      "false_contradiction_fraction_of_all_supports": 0.413043,
+      "false_support_fraction_of_all_contradictions": 0.732394,
+      "incorrect_decisive_total": 109,
+      "measured_cpu_model_call_wall_milliseconds_total": 976.8967,
+      "measured_cpu_policy_wall_milliseconds_total": 997.5331,
+      "median_full_policy_cpu_wall_milliseconds_per_case": 2.1604,
+      "model_inference_calls_by_type": {
+        "word": 209
+      },
+      "model_inference_calls_total": 209,
+      "model_input_whitespace_word_proxy_total_including_claim": 52201,
+      "n_original_claim_paper_pairs": 209,
+      "n_unique_original_claim_ids": 188,
+      "source_characters_reprocessed_across_calls": 340833,
+      "source_expert_CONTRADICT_pairs": 71,
+      "source_expert_SUPPORT_pairs": 138,
+      "source_whitespace_words_reprocessed_across_calls": 49205
+    },
+    "one_word_top3": {
+      "ABSTAIN_NEGATIVE": 0,
+      "ABSTAIN_POSITIVE": 0,
+      "FN": 59,
+      "FP": 53,
+      "TN": 18,
+      "TP": 79,
+      "abstained_total": 0,
+      "correct_decisive_total": 97,
+      "correct_decisive_with_complete_rationale_present": 77,
+      "correct_decisive_without_complete_rationale_present": 20,
+      "correct_fraction_of_all_pairs_not_crediting_abstention": 0.464115,
+      "correct_fraction_when_decisive": 0.464115,
+      "decisive_coverage": 1.0,
+      "decisive_total": 209,
+      "error_fraction_of_all_pairs_not_crediting_abstention": 0.535885,
+      "false_contradiction_fraction_of_all_supports": 0.427536,
+      "false_support_fraction_of_all_contradictions": 0.746479,
+      "incorrect_decisive_total": 112,
+      "measured_cpu_model_call_wall_milliseconds_total": 629.479,
+      "measured_cpu_policy_wall_milliseconds_total": 642.0211,
+      "median_full_policy_cpu_wall_milliseconds_per_case": 1.5976,
+      "model_inference_calls_by_type": {
+        "word": 209
+      },
+      "model_inference_calls_total": 209,
+      "model_input_whitespace_word_proxy_total_including_claim": 19480,
+      "n_original_claim_paper_pairs": 209,
+      "n_unique_original_claim_ids": 188,
+      "source_characters_reprocessed_across_calls": 116403,
+      "source_expert_CONTRADICT_pairs": 71,
+      "source_expert_SUPPORT_pairs": 138,
+      "source_whitespace_words_reprocessed_across_calls": 16484
+    },
+    "selective_review_support": {
+      "ABSTAIN_NEGATIVE": 9,
+      "ABSTAIN_POSITIVE": 2,
+      "FN": 59,
+      "FP": 44,
+      "TN": 18,
+      "TP": 77,
+      "abstained_total": 11,
+      "correct_decisive_total": 95,
+      "correct_decisive_with_complete_rationale_present": 90,
+      "correct_decisive_without_complete_rationale_present": 5,
+      "correct_fraction_of_all_pairs_not_crediting_abstention": 0.454545,
+      "correct_fraction_when_decisive": 0.479798,
+      "decisive_coverage": 0.947368,
+      "decisive_total": 198,
+      "error_fraction_of_all_pairs_not_crediting_abstention": 0.492823,
+      "false_contradiction_fraction_of_all_supports": 0.427536,
+      "false_support_fraction_of_all_contradictions": 0.619718,
+      "incorrect_decisive_total": 103,
+      "measured_cpu_model_call_wall_milliseconds_total": 2022.9786,
+      "measured_cpu_policy_wall_milliseconds_total": 2052.0832,
+      "median_full_policy_cpu_wall_milliseconds_per_case": 6.9034,
+      "model_inference_calls_by_type": {
+        "char": 132,
+        "word": 209
+      },
+      "model_inference_calls_total": 341,
+      "model_input_whitespace_word_proxy_total_including_claim": 47488,
+      "n_original_claim_paper_pairs": 209,
+      "n_unique_original_claim_ids": 188,
+      "source_characters_reprocessed_across_calls": 300089,
+      "source_expert_CONTRADICT_pairs": 71,
+      "source_expert_SUPPORT_pairs": 138,
+      "source_whitespace_words_reprocessed_across_calls": 42641
+    },
+    "selective_review_uncertain": {
+      "ABSTAIN_NEGATIVE": 13,
+      "ABSTAIN_POSITIVE": 9,
+      "FN": 52,
+      "FP": 44,
+      "TN": 14,
+      "TP": 77,
+      "abstained_total": 22,
+      "correct_decisive_total": 91,
+      "correct_decisive_with_complete_rationale_present": 84,
+      "correct_decisive_without_complete_rationale_present": 7,
+      "correct_fraction_of_all_pairs_not_crediting_abstention": 0.435407,
+      "correct_fraction_when_decisive": 0.486631,
+      "decisive_coverage": 0.894737,
+      "decisive_total": 187,
+      "error_fraction_of_all_pairs_not_crediting_abstention": 0.45933,
+      "false_contradiction_fraction_of_all_supports": 0.376812,
+      "false_support_fraction_of_all_contradictions": 0.619718,
+      "incorrect_decisive_total": 96,
+      "measured_cpu_model_call_wall_milliseconds_total": 2344.6024,
+      "measured_cpu_policy_wall_milliseconds_total": 2364.1005,
+      "median_full_policy_cpu_wall_milliseconds_per_case": 6.8189,
+      "model_inference_calls_by_type": {
+        "char": 115,
+        "word": 209
+      },
+      "model_inference_calls_total": 324,
+      "model_input_whitespace_word_proxy_total_including_claim": 51524,
+      "n_original_claim_paper_pairs": 209,
+      "n_unique_original_claim_ids": 188,
+      "source_characters_reprocessed_across_calls": 326539,
+      "source_expert_CONTRADICT_pairs": 71,
+      "source_expert_SUPPORT_pairs": 138,
+      "source_whitespace_words_reprocessed_across_calls": 46941
+    },
+    "two_consensus_full": {
+      "ABSTAIN_NEGATIVE": 12,
+      "ABSTAIN_POSITIVE": 5,
+      "FN": 53,
+      "FP": 44,
+      "TN": 15,
+      "TP": 80,
+      "abstained_total": 17,
+      "correct_decisive_total": 95,
+      "correct_decisive_with_complete_rationale_present": 95,
+      "correct_decisive_without_complete_rationale_present": 0,
+      "correct_fraction_of_all_pairs_not_crediting_abstention": 0.454545,
+      "correct_fraction_when_decisive": 0.494792,
+      "decisive_coverage": 0.91866,
+      "decisive_total": 192,
+      "error_fraction_of_all_pairs_not_crediting_abstention": 0.464115,
+      "false_contradiction_fraction_of_all_supports": 0.384058,
+      "false_support_fraction_of_all_contradictions": 0.619718,
+      "incorrect_decisive_total": 97,
+      "measured_cpu_model_call_wall_milliseconds_total": 3487.7735,
+      "measured_cpu_policy_wall_milliseconds_total": 3522.4274,
+      "median_full_policy_cpu_wall_milliseconds_per_case": 10.0024,
+      "model_inference_calls_by_type": {
+        "char": 209,
+        "word": 209
+      },
+      "model_inference_calls_total": 418,
+      "model_input_whitespace_word_proxy_total_including_claim": 104402,
+      "n_original_claim_paper_pairs": 209,
+      "n_unique_original_claim_ids": 188,
+      "source_characters_reprocessed_across_calls": 681666,
+      "source_expert_CONTRADICT_pairs": 71,
+      "source_expert_SUPPORT_pairs": 138,
+      "source_whitespace_words_reprocessed_across_calls": 98410
+    },
+    "two_consensus_top3": {
+      "ABSTAIN_NEGATIVE": 7,
+      "ABSTAIN_POSITIVE": 12,
+      "FN": 55,
+      "FP": 48,
+      "TN": 16,
+      "TP": 71,
+      "abstained_total": 19,
+      "correct_decisive_total": 87,
+      "correct_decisive_with_complete_rationale_present": 70,
+      "correct_decisive_without_complete_rationale_present": 17,
+      "correct_fraction_of_all_pairs_not_crediting_abstention": 0.416268,
+      "correct_fraction_when_decisive": 0.457895,
+      "decisive_coverage": 0.909091,
+      "decisive_total": 190,
+      "error_fraction_of_all_pairs_not_crediting_abstention": 0.492823,
+      "false_contradiction_fraction_of_all_supports": 0.398551,
+      "false_support_fraction_of_all_contradictions": 0.676056,
+      "incorrect_decisive_total": 103,
+      "measured_cpu_model_call_wall_milliseconds_total": 1932.6457,
+      "measured_cpu_policy_wall_milliseconds_total": 1959.4058,
+      "median_full_policy_cpu_wall_milliseconds_per_case": 5.6203,
+      "model_inference_calls_by_type": {
+        "char": 209,
+        "word": 209
+      },
+      "model_inference_calls_total": 418,
+      "model_input_whitespace_word_proxy_total_including_claim": 38960,
+      "n_original_claim_paper_pairs": 209,
+      "n_unique_original_claim_ids": 188,
+      "source_characters_reprocessed_across_calls": 232806,
+      "source_expert_CONTRADICT_pairs": 71,
+      "source_expert_SUPPORT_pairs": 138,
+      "source_whitespace_words_reprocessed_across_calls": 32968
+    },
+    "zero_call_abstain": {
+      "ABSTAIN_NEGATIVE": 71,
+      "ABSTAIN_POSITIVE": 138,
+      "FN": 0,
+      "FP": 0,
+      "TN": 0,
+      "TP": 0,
+      "abstained_total": 209,
+      "correct_decisive_total": 0,
+      "correct_decisive_with_complete_rationale_present": 0,
+      "correct_decisive_without_complete_rationale_present": 0,
+      "correct_fraction_of_all_pairs_not_crediting_abstention": 0.0,
+      "correct_fraction_when_decisive": null,
+      "decisive_coverage": 0.0,
+      "decisive_total": 0,
+      "error_fraction_of_all_pairs_not_crediting_abstention": 0.0,
+      "false_contradiction_fraction_of_all_supports": 0.0,
+      "false_support_fraction_of_all_contradictions": 0.0,
+      "incorrect_decisive_total": 0,
+      "measured_cpu_model_call_wall_milliseconds_total": 0.0,
+      "measured_cpu_policy_wall_milliseconds_total": 0.7436,
+      "median_full_policy_cpu_wall_milliseconds_per_case": 0.0034,
+      "model_inference_calls_by_type": {},
+      "model_inference_calls_total": 0,
+      "model_input_whitespace_word_proxy_total_including_claim": 0,
+      "n_original_claim_paper_pairs": 209,
+      "n_unique_original_claim_ids": 188,
+      "source_characters_reprocessed_across_calls": 0,
+      "source_expert_CONTRADICT_pairs": 71,
+      "source_expert_SUPPORT_pairs": 138,
+      "source_whitespace_words_reprocessed_across_calls": 0
+    },
+    "zero_call_support": {
+      "ABSTAIN_NEGATIVE": 0,
+      "ABSTAIN_POSITIVE": 0,
+      "FN": 0,
+      "FP": 71,
+      "TN": 0,
+      "TP": 138,
+      "abstained_total": 0,
+      "correct_decisive_total": 138,
+      "correct_decisive_with_complete_rationale_present": 0,
+      "correct_decisive_without_complete_rationale_present": 138,
+      "correct_fraction_of_all_pairs_not_crediting_abstention": 0.660287,
+      "correct_fraction_when_decisive": 0.660287,
+      "decisive_coverage": 1.0,
+      "decisive_total": 209,
+      "error_fraction_of_all_pairs_not_crediting_abstention": 0.339713,
+      "false_contradiction_fraction_of_all_supports": 0.0,
+      "false_support_fraction_of_all_contradictions": 1.0,
+      "incorrect_decisive_total": 71,
+      "measured_cpu_model_call_wall_milliseconds_total": 0.0,
+      "measured_cpu_policy_wall_milliseconds_total": 0.6595,
+      "median_full_policy_cpu_wall_milliseconds_per_case": 0.003,
+      "model_inference_calls_by_type": {},
+      "model_inference_calls_total": 0,
+      "model_input_whitespace_word_proxy_total_including_claim": 0,
+      "n_original_claim_paper_pairs": 209,
+      "n_unique_original_claim_ids": 188,
+      "source_characters_reprocessed_across_calls": 0,
+      "source_expert_CONTRADICT_pairs": 71,
+      "source_expert_SUPPORT_pairs": 138,
+      "source_whitespace_words_reprocessed_across_calls": 0
+    }
+  },
+  "same_case_primary_reviewer_errors": {
+    "at_least_one_model_wrong": 122,
+    "both_correct": 87,
+    "both_wrong": 103,
+    "plain_char_override_breaks_correct_word_answers": 10,
+    "plain_char_override_recovers_word_errors": 9,
+    "total_matched_original_cases": 209,
+    "word_correct_char_wrong": 10,
+    "word_wrong_char_correct": 9,
+    "wrong_wrong_cases": 103
+  },
+  "source_authority_relationships": {
+    "authority_interpretation": "The source paper is not globally SUPPORT or CONTRADICT; expert polarity is scoped to the exact claim and its original rationale. Older user quotes are historical observations and cannot defeat a newer governing user correction.",
+    "illustrative_distinct_claim_source_edges": [
+      {
+        "paper_id": "16472469",
+        "relationships": [
+          {
+            "claim_id": 990,
+            "expert_relation": "CONTRADICT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 992,
+            "expert_relation": "SUPPORT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 994,
+            "expert_relation": "CONTRADICT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 996,
+            "expert_relation": "SUPPORT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 997,
+            "expert_relation": "SUPPORT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 998,
+            "expert_relation": "CONTRADICT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 999,
+            "expert_relation": "SUPPORT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 1000,
+            "expert_relation": "SUPPORT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 993,
+            "expert_relation": "CONTRADICT",
+            "source_split": "dev"
+          }
+        ]
+      },
+      {
+        "paper_id": "14803797",
+        "relationships": [
+          {
+            "claim_id": 523,
+            "expert_relation": "CONTRADICT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 524,
+            "expert_relation": "SUPPORT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 881,
+            "expert_relation": "CONTRADICT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 883,
+            "expert_relation": "SUPPORT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 884,
+            "expert_relation": "SUPPORT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 882,
+            "expert_relation": "CONTRADICT",
+            "source_split": "dev"
+          }
+        ]
+      },
+      {
+        "paper_id": "33370",
+        "relationships": [
+          {
+            "claim_id": 1134,
+            "expert_relation": "SUPPORT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 1135,
+            "expert_relation": "CONTRADICT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 1136,
+            "expert_relation": "SUPPORT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 1403,
+            "expert_relation": "CONTRADICT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 1404,
+            "expert_relation": "SUPPORT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 1137,
+            "expert_relation": "CONTRADICT",
+            "source_split": "dev"
+          }
+        ]
+      },
+      {
+        "paper_id": "17077004",
+        "relationships": [
+          {
+            "claim_id": 495,
+            "expert_relation": "SUPPORT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 498,
+            "expert_relation": "CONTRADICT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 923,
+            "expert_relation": "SUPPORT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 925,
+            "expert_relation": "CONTRADICT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 922,
+            "expert_relation": "CONTRADICT",
+            "source_split": "dev"
+          }
+        ]
+      },
+      {
+        "paper_id": "22180793",
+        "relationships": [
+          {
+            "claim_id": 801,
+            "expert_relation": "CONTRADICT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 802,
+            "expert_relation": "CONTRADICT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 803,
+            "expert_relation": "SUPPORT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 804,
+            "expert_relation": "SUPPORT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 805,
+            "expert_relation": "SUPPORT",
+            "source_split": "dev"
+          }
+        ]
+      },
+      {
+        "paper_id": "4709641",
+        "relationships": [
+          {
+            "claim_id": 58,
+            "expert_relation": "CONTRADICT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 286,
+            "expert_relation": "SUPPORT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 287,
+            "expert_relation": "CONTRADICT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 56,
+            "expert_relation": "SUPPORT",
+            "source_split": "dev"
+          },
+          {
+            "claim_id": 57,
+            "expert_relation": "CONTRADICT",
+            "source_split": "dev"
+          }
+        ]
+      },
+      {
+        "paper_id": "6309659",
+        "relationships": [
+          {
+            "claim_id": 413,
+            "expert_relation": "CONTRADICT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 414,
+            "expert_relation": "SUPPORT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 416,
+            "expert_relation": "SUPPORT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 417,
+            "expert_relation": "CONTRADICT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 415,
+            "expert_relation": "SUPPORT",
+            "source_split": "dev"
+          }
+        ]
+      },
+      {
+        "paper_id": "9315213",
+        "relationships": [
+          {
+            "claim_id": 420,
+            "expert_relation": "SUPPORT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 680,
+            "expert_relation": "CONTRADICT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 681,
+            "expert_relation": "SUPPORT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 682,
+            "expert_relation": "SUPPORT",
+            "source_split": "train"
+          },
+          {
+            "claim_id": 683,
+            "expert_relation": "CONTRADICT",
+            "source_split": "train"
+          }
+        ]
+      }
+    ],
+    "source_papers_with_both_expert_SUPPORT_and_CONTRADICT_relations_to_distinct_claims": 179
+  },
+  "source_reference": {
+    "all_original_dev_pairs_reconciled_with_last_round": true,
+    "distinct_eval_source_claims": 188,
+    "original_BM25_evidence_prediction_sha256": "0e0f797b9cafdd0abb7a15ff06b898b9ad8ef4d15bdf4f22ec609831872a076e",
+    "original_classifier_code_sha256": "88bf18344bc9b3014146b8d560b1c99f3c8708a684389348ec6cb2c6abd59d12",
+    "original_eval_independently_labeled_pairs": 209,
+    "original_sci_fact_archive_sha256": "11c621288d41ac144d29b13b0f8503b3820b7d6e8b1f6ff24dff335c196d76be",
+    "previous_round_summary_sha256": "3dbd8e1da6531305f9c1df329a74e579c0386ab4374825d7c359c1c52f157a69",
+    "protocol_sha256": "634b3fa24cd81d20509b1e275fb58863ac6c9fac0ca1f0b84d4d464197fafa09",
+    "training_independently_source_labeled_pairs": 564
+  },
+  "uncertainty": {
+    "compare": "two_consensus_top3 minus one_word_top3",
+    "distinct_claim_clusters": 188,
+    "estimates": {
+      "abstain": {
+        "descriptive_claim_cluster_interval_95pct": [
+          0.054795,
+          0.130841
+        ],
+        "difference": 0.090909
+      },
+      "correct_decisive": {
+        "descriptive_claim_cluster_interval_95pct": [
+          -0.080952,
+          -0.022222
+        ],
+        "difference": -0.047847
+      },
+      "wrong_decisive": {
+        "descriptive_claim_cluster_interval_95pct": [
+          -0.072816,
+          -0.015075
+        ],
+        "difference": -0.043062
+      }
+    },
+    "resamples": 1000
+  },
+  "version": "swaag_sci_source_authority_review_policy_v1_20261026"
+}

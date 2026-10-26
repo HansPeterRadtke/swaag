@@ -1,0 +1,39 @@
+{
+  "claim_paper_selected_after_model_outcomes": "intentionally diagnostic, not prevalence",
+  "final_user_trajectories": 12,
+  "inference_backend": "SWAAG real isolated service with scripted FakeModelClient; no real Qwen",
+  "limitations": [
+    "Six cases intentionally selected from known mistakes, not representative",
+    "Real model verdicts were precomputed CPU models, and then returned by FakeModelClient; no new semantic model inference in SWAAG",
+    "Not a real Qwen deployment or an independent SWAAG worker action",
+    "The service cannot itself verify scientific entailment without independently returned evidence/tool results"
+  ],
+  "paired_source_cases": 6,
+  "policy_results": {
+    "one_word_top3": {
+      "actual_qwen_calls": 0,
+      "authentic_tool_receipts": 0,
+      "cpu_swaag_harness_end_to_end_wall_milliseconds": 8037.4111,
+      "model_calls_to_mock": 6,
+      "n": 6,
+      "right_terminal_final_user_replies": 1,
+      "source_complete_context_cases": 5,
+      "wrong_terminal_final_user_replies": 5
+    },
+    "two_consensus_top3": {
+      "actual_qwen_calls": 0,
+      "authentic_tool_receipts": 0,
+      "cpu_swaag_harness_end_to_end_wall_milliseconds": 7047.1846,
+      "model_calls_to_mock": 6,
+      "n": 6,
+      "right_terminal_final_user_replies": 1,
+      "source_complete_context_cases": 5,
+      "wrong_terminal_final_user_replies": 5
+    }
+  },
+  "source_original_label_status": "genuine independently annotated SciFact claim/paper relationships",
+  "source_score_file_sha256": "9abb684833e3cd1ea76998c8ae049b7843c07c7025b3c2dd8bf383f9cde279a0",
+  "true_negative_CONTRADICT_source_cases": 3,
+  "true_positive_SUPPORT_source_cases": 3,
+  "version": "swaag_sci_authority_final_user_bridge_v1_20261026"
+}
