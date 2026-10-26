@@ -1,0 +1,737 @@
+{
+  "costs": {
+    "all_first_selector_evaluated_tokens": 7669,
+    "all_first_selector_wall_seconds": 28.366544,
+    "first_selector_calls": 8,
+    "llm_model_requests_in_this_audit": 0,
+    "paired_first_selector_evaluated_tokens": 5600,
+    "paired_first_selector_wall_seconds": 21.826964,
+    "paired_full_direct_evaluated_tokens": 5593,
+    "paired_full_direct_wall_seconds": 20.874356,
+    "paired_selector_stage_already_slower_count": 5,
+    "reliable_total_model_select_final_cost_available": false,
+    "same_case_model_paired_full_vs_selector_first_stage_count": 6
+  },
+  "direct_final_records": [
+    {
+      "answer": "do_not_present_stale_state",
+      "case_id": "fresh_worker_status",
+      "matches_researcher_answer": true,
+      "model_family": "qwen3-coder",
+      "model_id": "qwen3-coder-30b-a3b-instruct-q4-k-m",
+      "source_count": 5,
+      "tokens": 780,
+      "trial_id": "ground-v1:fresh_worker_status:14833:full:s17",
+      "variant": "full",
+      "wall_seconds": 0.9614535090513527
+    },
+    {
+      "answer": "do_not_present_stale_state",
+      "case_id": "fresh_worker_status",
+      "matches_researcher_answer": true,
+      "model_family": "qwen38",
+      "model_id": "qwen38-27b-q8-full-262k",
+      "source_count": 5,
+      "tokens": 796,
+      "trial_id": "ground-v1:fresh_worker_status:14835:full:s17",
+      "variant": "full",
+      "wall_seconds": 4.279899136861786
+    },
+    {
+      "answer": "old_quote_overrides_current",
+      "case_id": "old_message_authority",
+      "matches_researcher_answer": false,
+      "model_family": "qwen3-coder",
+      "model_id": "qwen3-coder-30b-a3b-instruct-q4-k-m",
+      "source_count": 5,
+      "tokens": 1016,
+      "trial_id": "ground-v1:old_message_authority:14833:full:s17",
+      "variant": "full",
+      "wall_seconds": 1.5491779050789773
+    },
+    {
+      "answer": "current_request_and_supersession_win",
+      "case_id": "old_message_authority",
+      "matches_researcher_answer": true,
+      "model_family": "qwen38",
+      "model_id": "qwen38-27b-q8-full-262k",
+      "source_count": 5,
+      "tokens": 1031,
+      "trial_id": "ground-v1:old_message_authority:14835:full:s17",
+      "variant": "full",
+      "wall_seconds": 4.95105137093924
+    },
+    {
+      "answer": "exact_event_pointer",
+      "case_id": "oversized_message",
+      "matches_researcher_answer": true,
+      "model_family": "qwen3-coder",
+      "model_id": "qwen3-coder-30b-a3b-instruct-q4-k-m",
+      "source_count": 5,
+      "tokens": 961,
+      "trial_id": "ground-v1:oversized_message:14833:full:s17",
+      "variant": "full",
+      "wall_seconds": 1.091595137026161
+    },
+    {
+      "answer": "exact_event_pointer",
+      "case_id": "oversized_message",
+      "matches_researcher_answer": true,
+      "model_family": "qwen38",
+      "model_id": "qwen38-27b-q8-full-262k",
+      "source_count": 5,
+      "tokens": 974,
+      "trial_id": "ground-v1:oversized_message:14835:full:s17",
+      "variant": "full",
+      "wall_seconds": 4.364620213164017
+    },
+    {
+      "answer": "empty_token_count_accepted_for_nonempty_prompt",
+      "case_id": "tokenizer_zero_defect",
+      "matches_researcher_answer": true,
+      "model_family": "qwen3-coder",
+      "model_id": "qwen3-coder-30b-a3b-instruct-q4-k-m",
+      "source_count": 5,
+      "tokens": 924,
+      "trial_id": "ground-v1:tokenizer_zero_defect:14833:full:s17",
+      "variant": "full",
+      "wall_seconds": 1.4558201399631798
+    },
+    {
+      "answer": "validated_worker_step_weights",
+      "case_id": "worker_completion_percentage",
+      "matches_researcher_answer": true,
+      "model_family": "qwen3-coder",
+      "model_id": "qwen3-coder-30b-a3b-instruct-q4-k-m",
+      "source_count": 5,
+      "tokens": 836,
+      "trial_id": "ground-v1:worker_completion_percentage:14833:full:s17",
+      "variant": "full",
+      "wall_seconds": 1.2931678311433643
+    },
+    {
+      "answer": "validated_worker_step_weights",
+      "case_id": "worker_completion_percentage",
+      "matches_researcher_answer": true,
+      "model_family": "qwen38",
+      "model_id": "qwen38-27b-q8-full-262k",
+      "source_count": 5,
+      "tokens": 852,
+      "trial_id": "ground-v1:worker_completion_percentage:14835:full:s17",
+      "variant": "full",
+      "wall_seconds": 4.273787152022123
+    }
+  ],
+  "evidence_provenance": "actual previously recorded Qwen model messages and usage; no new model call",
+  "ground_truth_type": "authored_source_question_and_r1_r2_labels, not blinded human nor executable end_to_end effect gold",
+  "limitations": [
+    "Every source gold support ID is r1+r2 by construction; this is label leakage and invalidates these task labels as an independent semantic selection test.",
+    "The four researcher-oracle gold_select answers already receive the handpicked required sources and cannot be counted as automated selection successes.",
+    "8 model-selected first stages completed, zero second-stage answers; admission refusals are not semantic errors.",
+    "No independently human-adjudicated relevance gold, no full actual SWAAG worker tool/effect receipts, no GPU queue, per-request VRAM, or training FLOP figures.",
+    "Retrospectively only 9 of 16 planned full-context direct cells completed in this available archive; completed-only accuracy is selection-biased.",
+    "Equivalent source-slot budgets do not equal model inference compute budgets: Qwen uses a full extra LLM call; lexical and constant baselines use none.",
+    "Original model-run wall times may include variable backend contention; no uncontended paired randomized inference control exists."
+  ],
+  "matched_direct_vs_first_selector": [
+    {
+      "case_id": "fresh_worker_status",
+      "first_selector_tokens": 796,
+      "first_selector_wall_seconds": 4.388166134012863,
+      "full_direct_correct_against_author_label": true,
+      "full_direct_tokens": 796,
+      "full_direct_wall_seconds": 4.279899136861786,
+      "model_family": "qwen38",
+      "selector_minus_full_tokens": 0,
+      "selector_minus_full_wall_seconds": 0.108267
+    },
+    {
+      "case_id": "old_message_authority",
+      "first_selector_tokens": 1021,
+      "first_selector_wall_seconds": 1.7026749369688332,
+      "full_direct_correct_against_author_label": false,
+      "full_direct_tokens": 1016,
+      "full_direct_wall_seconds": 1.5491779050789773,
+      "model_family": "qwen3-coder",
+      "selector_minus_full_tokens": 5,
+      "selector_minus_full_wall_seconds": 0.153497
+    },
+    {
+      "case_id": "old_message_authority",
+      "first_selector_tokens": 1030,
+      "first_selector_wall_seconds": 4.899980542017147,
+      "full_direct_correct_against_author_label": true,
+      "full_direct_tokens": 1031,
+      "full_direct_wall_seconds": 4.95105137093924,
+      "model_family": "qwen38",
+      "selector_minus_full_tokens": -1,
+      "selector_minus_full_wall_seconds": -0.051071
+    },
+    {
+      "case_id": "oversized_message",
+      "first_selector_tokens": 977,
+      "first_selector_wall_seconds": 4.687435424886644,
+      "full_direct_correct_against_author_label": true,
+      "full_direct_tokens": 974,
+      "full_direct_wall_seconds": 4.364620213164017,
+      "model_family": "qwen38",
+      "selector_minus_full_tokens": 3,
+      "selector_minus_full_wall_seconds": 0.322815
+    },
+    {
+      "case_id": "tokenizer_zero_defect",
+      "first_selector_tokens": 922,
+      "first_selector_wall_seconds": 1.5655719651840627,
+      "full_direct_correct_against_author_label": true,
+      "full_direct_tokens": 924,
+      "full_direct_wall_seconds": 1.4558201399631798,
+      "model_family": "qwen3-coder",
+      "selector_minus_full_tokens": -2,
+      "selector_minus_full_wall_seconds": 0.109752
+    },
+    {
+      "case_id": "worker_completion_percentage",
+      "first_selector_tokens": 854,
+      "first_selector_wall_seconds": 4.583134587155655,
+      "full_direct_correct_against_author_label": true,
+      "full_direct_tokens": 852,
+      "full_direct_wall_seconds": 4.273787152022123,
+      "model_family": "qwen38",
+      "selector_minus_full_tokens": 2,
+      "selector_minus_full_wall_seconds": 0.309347
+    }
+  ],
+  "original_project_source_checksums": {
+    "docs/fast-long-history-candidates-2026-10-21.md": "0ca57219ccad1cc76893fe72e2e37561e18ff28bdc8cb70bd9e70607f540e7bf",
+    "docs/fast-worker-world-context-2026-10-20.md": "ecd807546428758fe72fc40489d7eeff8133dabd777d68a6bc2b589edb8edecf",
+    "docs/foreground-world-context-2026-10-19.md": "eacfcf6e82ff32b51a27190b8397f6d06b17def08d7b8f17f59fccc1692fa038",
+    "docs/tokenizer-admission-correction-2026-10-16.md": "7bb23cbe36acab47c4135f881f901e72bc71e9c89da553d35f9e5ef87ef5b5b7"
+  },
+  "preflight_refusal_records": [
+    {
+      "reason_category": "admission_refused_before_inference",
+      "trial_id": "ground-v1:fresh_worker_status:14833:model_select:s17"
+    },
+    {
+      "reason_category": "admission_refused_before_inference",
+      "trial_id": "ground-v1:fresh_worker_status:14835:gold_select:s17"
+    },
+    {
+      "reason_category": "admission_refused_before_inference",
+      "trial_id": "ground-v1:old_message_authority:14833:gold_select:s17"
+    },
+    {
+      "reason_category": "admission_refused_before_inference",
+      "trial_id": "ground-v1:older_history_lookup:14833:full:s17"
+    },
+    {
+      "reason_category": "admission_refused_before_inference",
+      "trial_id": "ground-v1:older_history_lookup:14835:full:s17"
+    },
+    {
+      "reason_category": "admission_refused_before_inference",
+      "trial_id": "ground-v1:oversized_message:14833:model_select:s17"
+    },
+    {
+      "reason_category": "admission_refused_before_inference",
+      "trial_id": "ground-v1:oversized_message:14835:gold_select:s17"
+    },
+    {
+      "reason_category": "admission_refused_before_inference",
+      "trial_id": "ground-v1:worker_completion_percentage:14833:gold_select:s17"
+    },
+    {
+      "reason_category": "admission_refused_before_inference",
+      "trial_id": "ground-v1:worker_completion_percentage:14833:model_select:s17"
+    },
+    {
+      "reason_category": "admission_refused_before_inference",
+      "trial_id": "ground-v1:worker_completion_percentage:14835:gold_select:s17"
+    }
+  ],
+  "privileged_gold_source_final_records": [
+    {
+      "answer": "do_not_present_stale_state",
+      "case_id": "fresh_worker_status",
+      "matches_researcher_answer": true,
+      "model_family": "qwen3-coder",
+      "model_id": "qwen3-coder-30b-a3b-instruct-q4-k-m",
+      "source_count": 2,
+      "tokens": 429,
+      "trial_id": "ground-v1:fresh_worker_status:14833:gold_select:s17",
+      "variant": "gold_select",
+      "wall_seconds": 0.9023236299399287
+    },
+    {
+      "answer": "scoped_user_message_index",
+      "case_id": "older_history_lookup",
+      "matches_researcher_answer": true,
+      "model_family": "qwen3-coder",
+      "model_id": "qwen3-coder-30b-a3b-instruct-q4-k-m",
+      "source_count": 2,
+      "tokens": 482,
+      "trial_id": "ground-v1:older_history_lookup:14833:gold_select:s17",
+      "variant": "gold_select",
+      "wall_seconds": 0.838339215144515
+    },
+    {
+      "answer": "scoped_user_message_index",
+      "case_id": "older_history_lookup",
+      "matches_researcher_answer": true,
+      "model_family": "qwen38",
+      "model_id": "qwen38-27b-q8-full-262k",
+      "source_count": 2,
+      "tokens": 492,
+      "trial_id": "ground-v1:older_history_lookup:14835:gold_select:s17",
+      "variant": "gold_select",
+      "wall_seconds": 3.2143862328957766
+    },
+    {
+      "answer": "exact_event_pointer",
+      "case_id": "oversized_message",
+      "matches_researcher_answer": true,
+      "model_family": "qwen3-coder",
+      "model_id": "qwen3-coder-30b-a3b-instruct-q4-k-m",
+      "source_count": 2,
+      "tokens": 419,
+      "trial_id": "ground-v1:oversized_message:14833:gold_select:s17",
+      "variant": "gold_select",
+      "wall_seconds": 0.9083164669573307
+    }
+  ],
+  "selection_confusions": {
+    "8_existing_Qwen_first_stage_calls": {
+      "FN": 0,
+      "FP": 2,
+      "TN": 22,
+      "TP": 16,
+      "selection_precision": 0.888889,
+      "support_recall": 1.0,
+      "unsupported_source_FPR": 0.083333
+    },
+    "pid_blind_BM25_same_selected_passage_counts": {
+      "FN": 2,
+      "FP": 4,
+      "TN": 20,
+      "TP": 14,
+      "selection_precision": 0.777778,
+      "support_recall": 0.875,
+      "unsupported_source_FPR": 0.166667
+    },
+    "zero_inference_pid_constant_selector": {
+      "FN": 0,
+      "FP": 0,
+      "TN": 24,
+      "TP": 16,
+      "selection_precision": 1.0,
+      "support_recall": 1.0,
+      "unsupported_source_FPR": 0.0
+    }
+  },
+  "source_checksums": {
+    "build_context_grounding_v1.py": "e5144d70204546d70e12a67c8c708a403e7edbd32301d6b112b40a2a77d40542",
+    "context_grounding_v1.json": "74e9e1bcd1e4381971374d11f73bffb0145e7af35294134b85b5c50fc0ceb321",
+    "evidence/context-grounding/observations-final.jsonl": "431a4677f184c9a52e543995a16963ec990d3dbbdbe3218bf18e6b5d4bbc5ffe",
+    "evidence/context-grounding/observations-overnight1.jsonl": "e71a5471b997b6d831071203b546c6b7788f739d1b4292f496fe6e842a4f6b93",
+    "evidence/context-grounding/observations.jsonl": "7273cb92d1b3835fb98a14884d7efffa00ab3fa3a1a4cea7fd577b74c0d48325",
+    "evidence/context-grounding/old_history_authority_coder_wrong_20261025.jsonl.gz": "776b47b0da36fcc35f70c9a050faec34e5c1e196420f074aac50377addb7fd51",
+    "evidence/context-grounding/overnight4_two_qwen_completed.jsonl.gz": "2e1b246f4faa650f98c7b8076df844d54e6e31884e90a9974fe0b2a3d45550f6",
+    "evidence/context-grounding/three_partial_selectors_no_answer_20261025.jsonl.gz": "f868ae7c7c41957593ffec3fa49d9b4d75f30a3df3542a95fe6be7069b33fd9a"
+  },
+  "source_selector_records": [
+    {
+      "bm25_confusion": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 3,
+        "TP": 2
+      },
+      "bm25_ids_same_source_budget": [
+        "r2",
+        "r1"
+      ],
+      "case_id": "fresh_worker_status",
+      "model_family": "qwen38",
+      "model_id": "qwen38-27b-q8-full-262k",
+      "role_id_constant_confusion": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 3,
+        "TP": 2
+      },
+      "role_id_constant_ids": [
+        "r1",
+        "r2"
+      ],
+      "selected_ids": [
+        "r1",
+        "r2"
+      ],
+      "source_confusion": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 3,
+        "TP": 2
+      },
+      "source_count": 2,
+      "tokens": 796,
+      "trial_id": "ground-v1:fresh_worker_status:14835:model_select:s17",
+      "wall_seconds": 4.388166134012863
+    },
+    {
+      "bm25_confusion": {
+        "FN": 0,
+        "FP": 1,
+        "TN": 2,
+        "TP": 2
+      },
+      "bm25_ids_same_source_budget": [
+        "r2",
+        "d1",
+        "r1"
+      ],
+      "case_id": "old_message_authority",
+      "model_family": "qwen3-coder",
+      "model_id": "qwen3-coder-30b-a3b-instruct-q4-k-m",
+      "role_id_constant_confusion": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 3,
+        "TP": 2
+      },
+      "role_id_constant_ids": [
+        "r1",
+        "r2"
+      ],
+      "selected_ids": [
+        "r1",
+        "r2",
+        "d1"
+      ],
+      "source_confusion": {
+        "FN": 0,
+        "FP": 1,
+        "TN": 2,
+        "TP": 2
+      },
+      "source_count": 3,
+      "tokens": 1021,
+      "trial_id": "ground-v1:old_message_authority:14833:model_select:s17",
+      "wall_seconds": 1.7026749369688332
+    },
+    {
+      "bm25_confusion": {
+        "FN": 1,
+        "FP": 1,
+        "TN": 2,
+        "TP": 1
+      },
+      "bm25_ids_same_source_budget": [
+        "r2",
+        "d1"
+      ],
+      "case_id": "old_message_authority",
+      "model_family": "qwen38",
+      "model_id": "qwen38-27b-q8-full-262k",
+      "role_id_constant_confusion": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 3,
+        "TP": 2
+      },
+      "role_id_constant_ids": [
+        "r1",
+        "r2"
+      ],
+      "selected_ids": [
+        "r1",
+        "r2"
+      ],
+      "source_confusion": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 3,
+        "TP": 2
+      },
+      "source_count": 2,
+      "tokens": 1030,
+      "trial_id": "ground-v1:old_message_authority:14835:model_select:s17",
+      "wall_seconds": 4.899980542017147
+    },
+    {
+      "bm25_confusion": {
+        "FN": 0,
+        "FP": 1,
+        "TN": 2,
+        "TP": 2
+      },
+      "bm25_ids_same_source_budget": [
+        "r1",
+        "r2",
+        "d3"
+      ],
+      "case_id": "older_history_lookup",
+      "model_family": "qwen3-coder",
+      "model_id": "qwen3-coder-30b-a3b-instruct-q4-k-m",
+      "role_id_constant_confusion": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 3,
+        "TP": 2
+      },
+      "role_id_constant_ids": [
+        "r1",
+        "r2"
+      ],
+      "selected_ids": [
+        "r1",
+        "r2",
+        "d1"
+      ],
+      "source_confusion": {
+        "FN": 0,
+        "FP": 1,
+        "TN": 2,
+        "TP": 2
+      },
+      "source_count": 3,
+      "tokens": 1030,
+      "trial_id": "ground-v1:older_history_lookup:14833:model_select:s17",
+      "wall_seconds": 1.6933833011426032
+    },
+    {
+      "bm25_confusion": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 3,
+        "TP": 2
+      },
+      "bm25_ids_same_source_budget": [
+        "r1",
+        "r2"
+      ],
+      "case_id": "older_history_lookup",
+      "model_family": "qwen38",
+      "model_id": "qwen38-27b-q8-full-262k",
+      "role_id_constant_confusion": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 3,
+        "TP": 2
+      },
+      "role_id_constant_ids": [
+        "r1",
+        "r2"
+      ],
+      "selected_ids": [
+        "r1",
+        "r2"
+      ],
+      "source_confusion": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 3,
+        "TP": 2
+      },
+      "source_count": 2,
+      "tokens": 1039,
+      "trial_id": "ground-v1:older_history_lookup:14835:model_select:s17",
+      "wall_seconds": 4.8461971541401
+    },
+    {
+      "bm25_confusion": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 3,
+        "TP": 2
+      },
+      "bm25_ids_same_source_budget": [
+        "r2",
+        "r1"
+      ],
+      "case_id": "oversized_message",
+      "model_family": "qwen38",
+      "model_id": "qwen38-27b-q8-full-262k",
+      "role_id_constant_confusion": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 3,
+        "TP": 2
+      },
+      "role_id_constant_ids": [
+        "r1",
+        "r2"
+      ],
+      "selected_ids": [
+        "r1",
+        "r2"
+      ],
+      "source_confusion": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 3,
+        "TP": 2
+      },
+      "source_count": 2,
+      "tokens": 977,
+      "trial_id": "ground-v1:oversized_message:14835:model_select:s17",
+      "wall_seconds": 4.687435424886644
+    },
+    {
+      "bm25_confusion": {
+        "FN": 1,
+        "FP": 1,
+        "TN": 2,
+        "TP": 1
+      },
+      "bm25_ids_same_source_budget": [
+        "r1",
+        "d1"
+      ],
+      "case_id": "tokenizer_zero_defect",
+      "model_family": "qwen3-coder",
+      "model_id": "qwen3-coder-30b-a3b-instruct-q4-k-m",
+      "role_id_constant_confusion": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 3,
+        "TP": 2
+      },
+      "role_id_constant_ids": [
+        "r1",
+        "r2"
+      ],
+      "selected_ids": [
+        "r1",
+        "r2"
+      ],
+      "source_confusion": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 3,
+        "TP": 2
+      },
+      "source_count": 2,
+      "tokens": 922,
+      "trial_id": "ground-v1:tokenizer_zero_defect:14833:model_select:s17",
+      "wall_seconds": 1.5655719651840627
+    },
+    {
+      "bm25_confusion": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 3,
+        "TP": 2
+      },
+      "bm25_ids_same_source_budget": [
+        "r2",
+        "r1"
+      ],
+      "case_id": "worker_completion_percentage",
+      "model_family": "qwen38",
+      "model_id": "qwen38-27b-q8-full-262k",
+      "role_id_constant_confusion": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 3,
+        "TP": 2
+      },
+      "role_id_constant_ids": [
+        "r1",
+        "r2"
+      ],
+      "selected_ids": [
+        "r2",
+        "r1"
+      ],
+      "source_confusion": {
+        "FN": 0,
+        "FP": 0,
+        "TN": 3,
+        "TP": 2
+      },
+      "source_count": 2,
+      "tokens": 854,
+      "trial_id": "ground-v1:worker_completion_percentage:14835:model_select:s17",
+      "wall_seconds": 4.583134587155655
+    }
+  ],
+  "summary": {
+    "admission_refused_before_model_call": 10,
+    "authored_support_label_identity": "r1,r2 for every case",
+    "authored_support_labels_per_case": 2,
+    "best_case_correct_full_direct_of_16_if_all_missing_correct": 15,
+    "byte_identical_overlaps": 56,
+    "compared_selector_ids_total": 18,
+    "completed_full_context_direct": 9,
+    "completed_model_source_selection_first_stage_only": 8,
+    "completed_real_two_call_selection_then_answer": 0,
+    "completed_researcher_oracle_gold_selection": 4,
+    "direct_source_answer_author_anchor_correct": 8,
+    "direct_source_answer_author_anchor_incorrect": 1,
+    "full_direct_by_model": {
+      "qwen3-coder": {
+        "matched_researcher_answer": 4,
+        "observed": 5
+      },
+      "qwen38": {
+        "matched_researcher_answer": 4,
+        "observed": 4
+      }
+    },
+    "full_planned_condition_cells": 48,
+    "missing_full_direct_cells": 7,
+    "not_attempted_any_recorded_call": 17,
+    "observed_trial_ids": 31,
+    "original_event_records": 150,
+    "planned": 48,
+    "trial_ids_only_in_unattempted_plan": 17,
+    "unchanged_source_passage_spans_verified": 40,
+    "unique_case_ids": 8,
+    "unique_events": 94,
+    "worst_case_correct_full_direct_of_16_if_all_missing_wrong": 8
+  },
+  "unfinished_selector_records": [
+    {
+      "reason_category": "supervisor_admission_refusal_after_stage_one",
+      "status": "selector_completed_answer_never_dispatched",
+      "trial_id": "ground-v1:fresh_worker_status:14835:model_select:s17"
+    },
+    {
+      "reason_category": "supervisor_admission_refusal_after_stage_one",
+      "status": "selector_completed_answer_never_dispatched",
+      "trial_id": "ground-v1:old_message_authority:14833:model_select:s17"
+    },
+    {
+      "reason_category": "supervisor_admission_refusal_after_stage_one",
+      "status": "selector_completed_answer_never_dispatched",
+      "trial_id": "ground-v1:old_message_authority:14835:model_select:s17"
+    },
+    {
+      "reason_category": "supervisor_admission_refusal_after_stage_one",
+      "status": "selector_completed_answer_never_dispatched",
+      "trial_id": "ground-v1:older_history_lookup:14833:model_select:s17"
+    },
+    {
+      "reason_category": "supervisor_admission_refusal_after_stage_one",
+      "status": "selector_completed_answer_never_dispatched",
+      "trial_id": "ground-v1:older_history_lookup:14835:model_select:s17"
+    },
+    {
+      "reason_category": "supervisor_admission_refusal_after_stage_one",
+      "status": "selector_completed_answer_never_dispatched",
+      "trial_id": "ground-v1:oversized_message:14835:model_select:s17"
+    },
+    {
+      "reason_category": "supervisor_admission_refusal_after_stage_one",
+      "status": "selector_completed_answer_never_dispatched",
+      "trial_id": "ground-v1:tokenizer_zero_defect:14833:model_select:s17"
+    },
+    {
+      "reason_category": "supervisor_admission_refusal_after_stage_one",
+      "status": "selector_completed_answer_never_dispatched",
+      "trial_id": "ground-v1:worker_completion_percentage:14835:model_select:s17"
+    }
+  ],
+  "version": "swaag-archived-qwen-source-leakage-audit-v1-20261026"
+}

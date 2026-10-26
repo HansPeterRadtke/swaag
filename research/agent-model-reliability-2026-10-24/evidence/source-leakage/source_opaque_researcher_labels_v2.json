@@ -1,0 +1,140 @@
+{
+  "label_integrity": "Original researcher-authored support spans retained; unvalidated for human/effect gold",
+  "labels": [
+    {
+      "authored_expected_evidence_ids": [
+        "s_d0ba47ac43688aa0",
+        "s_134b81b511a66f06"
+      ],
+      "case_id": "fresh_worker_status",
+      "expected_answer": "do_not_present_stale_state",
+      "label_origin": "same_original_researcher_labels_NOT_independent_human_gold",
+      "original_source_label_mapping_for_audit_only": {
+        "d1": "s_e0d3d9ea205ecbef",
+        "d2": "s_83de669fbc31e4db",
+        "d3": "s_403d4989085cc457",
+        "r1": "s_d0ba47ac43688aa0",
+        "r2": "s_134b81b511a66f06"
+      }
+    },
+    {
+      "authored_expected_evidence_ids": [
+        "s_7fe753ff74006134",
+        "s_d0669522a904170a"
+      ],
+      "case_id": "worker_completion_percentage",
+      "expected_answer": "validated_worker_step_weights",
+      "label_origin": "same_original_researcher_labels_NOT_independent_human_gold",
+      "original_source_label_mapping_for_audit_only": {
+        "d1": "s_476144a2b82400c5",
+        "d2": "s_3c6bd8cb360ba69d",
+        "d3": "s_fdaa9884ed66934a",
+        "r1": "s_7fe753ff74006134",
+        "r2": "s_d0669522a904170a"
+      }
+    },
+    {
+      "authored_expected_evidence_ids": [
+        "s_bf7a1d73008ceb4a",
+        "s_2c5feb0e6006a062"
+      ],
+      "case_id": "older_history_lookup",
+      "expected_answer": "scoped_user_message_index",
+      "label_origin": "same_original_researcher_labels_NOT_independent_human_gold",
+      "original_source_label_mapping_for_audit_only": {
+        "d1": "s_14865f4a085958c9",
+        "d2": "s_73c090dcabfbf5cd",
+        "d3": "s_95b7718fdb2c9b32",
+        "r1": "s_bf7a1d73008ceb4a",
+        "r2": "s_2c5feb0e6006a062"
+      }
+    },
+    {
+      "authored_expected_evidence_ids": [
+        "s_ccf1772f8749edc3",
+        "s_48eb7b27401763e0"
+      ],
+      "case_id": "oversized_message",
+      "expected_answer": "exact_event_pointer",
+      "label_origin": "same_original_researcher_labels_NOT_independent_human_gold",
+      "original_source_label_mapping_for_audit_only": {
+        "d1": "s_1f203304de8d0ed6",
+        "d2": "s_10430481b530ccdd",
+        "d3": "s_8745225241d0706a",
+        "r1": "s_ccf1772f8749edc3",
+        "r2": "s_48eb7b27401763e0"
+      }
+    },
+    {
+      "authored_expected_evidence_ids": [
+        "s_e310f09aa3fe1430",
+        "s_8e7b956e11dfe54d"
+      ],
+      "case_id": "old_message_authority",
+      "expected_answer": "current_request_and_supersession_win",
+      "label_origin": "same_original_researcher_labels_NOT_independent_human_gold",
+      "original_source_label_mapping_for_audit_only": {
+        "d1": "s_4dae1ff19eae244a",
+        "d2": "s_201945fdcbf2ab55",
+        "d3": "s_c59f7216e7eaddbc",
+        "r1": "s_e310f09aa3fe1430",
+        "r2": "s_8e7b956e11dfe54d"
+      }
+    },
+    {
+      "authored_expected_evidence_ids": [
+        "s_83182436b93d9d1e",
+        "s_8953388afe49ed7d"
+      ],
+      "case_id": "tokenizer_zero_defect",
+      "expected_answer": "empty_token_count_accepted_for_nonempty_prompt",
+      "label_origin": "same_original_researcher_labels_NOT_independent_human_gold",
+      "original_source_label_mapping_for_audit_only": {
+        "d1": "s_e586c2157624d6a6",
+        "d2": "s_2d90d9f8c4d9b2f7",
+        "d3": "s_35eb56fcf14a6ed6",
+        "r1": "s_83182436b93d9d1e",
+        "r2": "s_8953388afe49ed7d"
+      }
+    },
+    {
+      "authored_expected_evidence_ids": [
+        "s_1d34b86084f1139e",
+        "s_15f8c1ff33ed9ee8"
+      ],
+      "case_id": "tokenizer_correction",
+      "expected_answer": "rejected_as_over_context",
+      "label_origin": "same_original_researcher_labels_NOT_independent_human_gold",
+      "original_source_label_mapping_for_audit_only": {
+        "d1": "s_99938c0e111edb39",
+        "d2": "s_83fb694952f841e3",
+        "d3": "s_8bacb6be2f14c546",
+        "r1": "s_1d34b86084f1139e",
+        "r2": "s_15f8c1ff33ed9ee8"
+      }
+    },
+    {
+      "authored_expected_evidence_ids": [
+        "s_00b8ff373f35f1b8",
+        "s_2b117e75aa361091"
+      ],
+      "case_id": "compact_world_projection",
+      "expected_answer": "background_prepared_world_view",
+      "label_origin": "same_original_researcher_labels_NOT_independent_human_gold",
+      "original_source_label_mapping_for_audit_only": {
+        "d1": "s_968a58f0bacc9061",
+        "d2": "s_61e9b40ed6c2681e",
+        "d3": "s_a61cc818174b384b",
+        "r1": "s_00b8ff373f35f1b8",
+        "r2": "s_2b117e75aa361091"
+      }
+    }
+  ],
+  "source_hashes": {
+    "docs/fast-long-history-candidates-2026-10-21.md": "0ca57219ccad1cc76893fe72e2e37561e18ff28bdc8cb70bd9e70607f540e7bf",
+    "docs/fast-worker-world-context-2026-10-20.md": "ecd807546428758fe72fc40489d7eeff8133dabd777d68a6bc2b589edb8edecf",
+    "docs/foreground-world-context-2026-10-19.md": "eacfcf6e82ff32b51a27190b8397f6d06b17def08d7b8f17f59fccc1692fa038",
+    "docs/tokenizer-admission-correction-2026-10-16.md": "7bb23cbe36acab47c4135f881f901e72bc71e9c89da553d35f9e5ef87ef5b5b7"
+  },
+  "version": "swaag-context-same-source-opaque-ids-v2-20261026"
+}
