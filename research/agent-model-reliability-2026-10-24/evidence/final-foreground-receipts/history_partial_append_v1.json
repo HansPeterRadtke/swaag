@@ -1,0 +1,13 @@
+{
+  "version": "swaag_history_partial_append_read_race_v1_20261026",
+  "canonical_history_py_sha256": "74ede3f4b58bf387ffc6a9478c8fdc0b56f6b48cc042f0f69a5bfd6e2486516a",
+  "withheld_write_tail_deterministically": true,
+  "reader_error_during_split_append": "HistoryCorruptionError",
+  "reader_recovered_after_append_complete": true,
+  "final_history_chain_verifies": true,
+  "temporary_partial_history_size": 657,
+  "complete_history_size": 931,
+  "no_production_history_files_touched": true,
+  "no_model_calls_or_external_tool_effects": true,
+  "interpretation": "For an in-progress append, a separate reader can see a truncated final JSONL record. This is a deterministic fault-injection demonstration, not measured spontaneous failure frequency or confirmed root cause of one previous failure."
+}
