@@ -141,6 +141,7 @@ def capability_from_saved_host_manifest(case,manifest):
    approved_identity=RenderSourceBinding(**ref['state']),
    actual_identity=RenderSourceBinding(**actual['state']),
    manifest_sha256=file_sha(OUT/'frozen_manifest.json'),
+   approved_source_sha256=ref['sha256'], actual_capture_sha256=actual['sha256'],
    reference_manifest_attested=True,rendered_state_attested=True,
    immutable_snapshot_contract=True)
  return provide

@@ -41,7 +41,8 @@ def _host_attestor(approved, actual, *, source=None, target=None, **changes):
     values = dict(approved_attachment_id=approved.attachment_id,
                   actual_attachment_id=actual.attachment_id,
                   approved_identity=source or _identity(), actual_identity=target or _identity(),
-                  manifest_sha256="a"*64, reference_manifest_attested=True,
+                  manifest_sha256="a"*64, approved_source_sha256=approved.sha256,
+                  actual_capture_sha256=actual.sha256, reference_manifest_attested=True,
                   rendered_state_attested=True, immutable_snapshot_contract=True)
     return HostAttestedSnapshot(**{**values,**changes})
 
@@ -172,3 +173,73 @@ def test_extra_untrusted_fields_are_not_accepted(make_config, tmp_path):
     assert result.tool_result is None
     assert result.error["error_type"]=="ToolValidationError"
     assert "attestation/state metadata" in result.error["error"]
+
+
+def test_host_pinned_source_hash_and_independent_capture_sha_cannot_be_replaced(make_config, tmp_path):
+    """Self-reported blob hashes are not authority over publisher/capture bytes."""
+    runtime=_new_runtime(make_config,tmp_path)
+    s=runtime.create_or_load_session();ref,changed=_attach_pair(runtime,s.session_id,mutation=True)
+    for overrides in ({'approved_source_sha256':'0'*64},
+                      {'actual_capture_sha256':'f'*64},
+                      {'approved_source_sha256':'malformed'},
+                      {'actual_capture_sha256':'malformed'}):
+        runtime.bind_tool_runtime_capability(s.session_id,'immutable_snapshot_attestor',
+            lambda r,a,override=overrides:_host_attestor(r,a,**override))
+        result=_run(runtime,s.session_id,ref,changed)
+        assert result.error is None
+        assert result.tool_result.output['verdict']=='review'
+        assert result.tool_result.output['reason'] in {
+            'host_source_or_capture_sha256_mismatch','missing_or_invalid_host_attestation'}
+    runtime.bind_tool_runtime_capability(s.session_id,'immutable_snapshot_attestor',lambda r,a:_host_attestor(r,a))
+    success=_run(runtime,s.session_id,ref,changed)
+    assert success.error is None and success.tool_result.output['verdict']=='fail'
+
+
+def test_fake_png_header_or_corrupted_png_does_not_receive_pass_or_fail(make_config, tmp_path):
+    """Detect actual non-renderable final PNGs, not just trusted 24-byte IHDR."""
+    runtime=_new_runtime(make_config,tmp_path)
+    s=runtime.create_or_load_session()
+    valid=_real_png(144)
+    # Original implementation checked only first 24 bytes and valid
+    # attachment SHA. All these have a valid-looking PNG signature and IHDR.
+    wrong_media={
+        'header_only':valid[:24],
+        'truncated_before_end':valid[:-12],
+        'invalid_payload_crc':valid[:50]+bytes((valid[50]^1,))+valid[51:],
+        'trailing_bytes_after_IEND':valid+b'garbage',
+    }
+    from swaag.tools.verified_snapshots import _png_dimensions
+    for name,data in wrong_media.items():
+        assert _png_dimensions(tmp_path/'unknown.png') is None
+        if name != 'trailing_bytes_after_IEND':
+            candidate=tmp_path/(name+'.png');candidate.write_bytes(data)
+            assert _png_dimensions(candidate)==(3,2), 'old header-only tool would have accepted IHDR'
+        corrupt=runtime.add_attachment(data, original_name=name+'.png',media_type='image/png',session_id=s.session_id)
+        correct=runtime.add_attachment(valid, original_name='valid-'+name+'.png',media_type='image/png',session_id=s.session_id)
+        runtime.bind_tool_runtime_capability(s.session_id,'immutable_snapshot_attestor',lambda r,a:_host_attestor(r,a))
+        # Both references equal corrupted bytes; old header-only gate gave
+        # an incorrect PASS even when final output was not decodable.
+        invalid_result=_run(runtime,s.session_id,corrupt,corrupt)
+        assert invalid_result.error is None
+        assert invalid_result.tool_result.output['verdict']=='review', name
+        assert invalid_result.tool_result.output['reason']=='png_final_pixels_or_end_boundary_not_verified',name
+        # Even a definite byte difference is not a qualified screenshot
+        # comparison when one input cannot be rendered.
+        invalid_changed=_run(runtime,s.session_id,correct,corrupt)
+        assert invalid_changed.error is None
+        assert invalid_changed.tool_result.output['verdict']=='review',name
+        # Unmodified real decoded pixels remain an exact byte PASS.
+        clean=_run(runtime,s.session_id,correct,correct)
+        assert clean.error is None and clean.tool_result.output['verdict']=='pass'
+
+
+def test_absent_optional_decoder_is_review_not_bypass(make_config, tmp_path, monkeypatch):
+    runtime=_new_runtime(make_config,tmp_path)
+    s=runtime.create_or_load_session();ref,actual=_attach_pair(runtime,s.session_id)
+    runtime.bind_tool_runtime_capability(s.session_id,'immutable_snapshot_attestor',lambda r,a:_host_attestor(r,a))
+    import sys
+    monkeypatch.setitem(sys.modules,'PIL',None)
+    result=_run(runtime,s.session_id,ref,actual)
+    assert result.error is None
+    assert result.tool_result.output['verdict']=='review'
+    assert result.tool_result.output['reason']=='png_final_pixels_or_end_boundary_not_verified'

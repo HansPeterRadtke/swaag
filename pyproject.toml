@@ -31,6 +31,8 @@ Repository = "https://github.com/HansPeterRadtke/swaag"
 Issues = "https://github.com/HansPeterRadtke/swaag/issues"
 
 [project.optional-dependencies]
+# Optional local pixel decoder for strict immutable-snapshot source validation.
+perceptual-snapshots = ["Pillow>=11,<13"]
 test = [
   "pytest>=8,<9",
   "pytest-testmon>=2.1,<3",

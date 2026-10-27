@@ -1,0 +1,394 @@
+{
+  "PNG_pixel_decoder_boundary": "Opt-in Pillow>=11,<13; any missing Pillow or invalid pixel data, malformed CRC or absent final PNG IEND returns REVIEW; no blanket image/video quality approval. Pixel decoding/CRC validation is not an appraisal of readability, lighting or semantics.",
+  "actual_attachment_tool_call_count": 32,
+  "case_counts": {
+    "changed": {
+      "correct": 8,
+      "expected_verdict": "fail",
+      "max_seconds": 0.9378,
+      "median_seconds": 0.5976,
+      "min_seconds": 0.4532,
+      "n": 8
+    },
+    "clean": {
+      "correct": 8,
+      "expected_verdict": "pass",
+      "max_seconds": 1.3041,
+      "median_seconds": 0.4989,
+      "min_seconds": 0.3354,
+      "n": 8
+    },
+    "truncated_final_png": {
+      "correct": 8,
+      "expected_verdict": "review",
+      "max_seconds": 1.3291,
+      "median_seconds": 0.813,
+      "min_seconds": 0.4789,
+      "n": 8
+    },
+    "wrong_activity": {
+      "correct": 8,
+      "expected_verdict": "review",
+      "max_seconds": 1.2643,
+      "median_seconds": 0.7189,
+      "min_seconds": 0.468,
+      "n": 8
+    }
+  },
+  "central_finding": "The old registered SWAAG tool required only 24 PNG header bytes and attachment self-checksums for exact-byte PASS/FAIL. Strict current tool requires host-attested independent SOURCE and TARGET capture SHA digests, original content SHA receipts, full pixel decode and verified terminal IEND boundary. Unknown/corrupt media -> REVIEW.",
+  "complete_actual_registered_runtime_result_SHA256": "9fd076833bbb3809b828788ba55f0d2dba1a808aee463e74b238e79acd7548a2",
+  "confusion_by_exact_defined_property": {
+    "source_correct_exact_immutable_unchanged": {
+      "FP": 0,
+      "TN": 8
+    },
+    "source_correct_immutable_changed": {
+      "FN": 0,
+      "TP": 8
+    },
+    "source_wrong_activity": {
+      "REVIEW": 8,
+      "auto_FAIL": 0,
+      "auto_PASS": 0
+    },
+    "undecodable_actual_PNG": {
+      "REVIEW": 8,
+      "auto_FAIL": 0,
+      "auto_PASS": 0
+    }
+  },
+  "corrupted_negative": "8/8 of the original unmodified publisher PNGs had ONLY the 12-byte IEND end marker removed in a NEW derived capture, preserving the authentic source IHDR and most compressed pixel bytes. They were intentionally script-controlled invalid final media and returned REVIEW, not an incorrect definitive snapshot verdict.",
+  "cost": {
+    "GPU_used": false,
+    "all_32_cases_actual_SWAAG_attachment_store_and_durable_history_wall_s": 33.716,
+    "max_call_wall_s": 1.3291,
+    "median_call_wall_s_by_class": {
+      "changed": 0.5976,
+      "clean": 0.4989,
+      "truncated_final_png": 0.813,
+      "wrong_activity": 0.7189
+    },
+    "min_call_wall_s": 0.3354,
+    "no_claim_compressed_decoder_pure_CPU_time_from_runtime_wall": true,
+    "old_3case_runtime_wall_s_not_matched_for_before_after": true
+  },
+  "date": "2026-10-27",
+  "dependency_lock_sha256": "b6882526b6dfda559384b12bb83cf3d394f9a9a10f6954ea7523646d33ed37f7",
+  "dependency_pyproject_sha256": "b5aaf9ca1f0ec03e321fd8b0e9c6701a20e5907863db47559e1136ff93104614",
+  "descriptive_uncertainty_not_general_population": {
+    "n16_zero_unqualified_auto_decisions_95pct_exact_binomial_upper": 0.20591,
+    "n8_success_95pct_exact_binomial_lower": 0.63058,
+    "warning": "These intervals are descriptive conditional on an assumed iid model that is NOT valid for correlated modified screenshots; cannot be extrapolated to native GUI deployment."
+  },
+  "frozen_gold_authority": "Author-produced synthetic defects and author-approved Android original images; no new independent human visual annotations. The eight end-boundary negatives are script-authored PNG truncations, not natural error prevalence.",
+  "host_attestation_boundary": "Source SHA expected is independently host-pinned publisher manifest data, capture SHA expected is the trusted screenshot capture receipt, both bound to actual content-addressed attachment bytes. A malicious/incorrectly implemented host could still fabricate both and the manifest identity; this is NOT a cryptographically authenticated live Android capture service.",
+  "known_limitations": [
+    "The extra host SHA claims must be verified by a trusted live host from a source manifest and actual output capture; the tool only checks consistency between claims and attachments, not signed authority.",
+    "This exact-byte contract applies only where snapshot equality is genuinely intended; normal dynamic GUIs, alternate rendering/encoding and valid edits must REVIEW.",
+    "Actual screenshot human clipping, occlusion, contrast, diagram arrow direction, 3D industrial semantic parts and video audiovisual synchronization are NOT classified by these byte tests.",
+    "Current tests are opt-in isolated SWAAG research runtime; no production workers, source services or GPU models were restarted, and original asset bytes are unchanged.",
+    "The previously rejected storyboard transfer and absent RotBench source URLs were not retried.",
+    "Original 32 controls do not provide a valid population error rate; separate independent human source labels for real native GUI dynamic changes remain missing."
+  ],
+  "original_release_SHA256": "0586b29f82590636806e7dd05a45e6933d46286318a52e444cee4241fb785ca7",
+  "outcomes_compact": [
+    {
+      "actual_SWAAG_tool_call_wall_s": 1.3041,
+      "category": "clean",
+      "durable_event_hash": "42bca944563f0e3675b5bd0c0982bbd06b2465d80f91ce7e32d0b055abb59581",
+      "expected": "pass",
+      "hash_id": "7ed8f0f3b707956d9fb1e889e11153e0aa0a854983081d262fbe5eede32da7ca",
+      "reason": "verified_immutable_png_bytes_equal",
+      "verified_outcome": "pass"
+    },
+    {
+      "actual_SWAAG_tool_call_wall_s": 0.4906,
+      "category": "clean",
+      "durable_event_hash": "b50ae27b08e1652481c8dd5bc4b9a7fff5fbe8a3f124b0ffdc0854427a967980",
+      "expected": "pass",
+      "hash_id": "49d180ecf56132819571bf39d9b7b342522a2ac6d23c1418d3338251bfe469c8",
+      "reason": "verified_immutable_png_bytes_equal",
+      "verified_outcome": "pass"
+    },
+    {
+      "actual_SWAAG_tool_call_wall_s": 0.6049,
+      "category": "clean",
+      "durable_event_hash": "68f7b384c8f97f4604d7e944adf4b453e697632f95d37843c791072251a5a3e3",
+      "expected": "pass",
+      "hash_id": "1a6562590ef19d1045d06c4055742d38288e9e6dcd71ccde5cee80f1d5a774eb",
+      "reason": "verified_immutable_png_bytes_equal",
+      "verified_outcome": "pass"
+    },
+    {
+      "actual_SWAAG_tool_call_wall_s": 0.4939,
+      "category": "clean",
+      "durable_event_hash": "1c54d66214bdb0089eb52f1d535ff1381f7166c1c6f155b4f6ac554753888482",
+      "expected": "pass",
+      "hash_id": "96061e92f58e4bdcdee73df36183fe3ac64747c81c26f6c83aada8d2aabb1864",
+      "reason": "verified_immutable_png_bytes_equal",
+      "verified_outcome": "pass"
+    },
+    {
+      "actual_SWAAG_tool_call_wall_s": 0.3354,
+      "category": "clean",
+      "durable_event_hash": "3f743215d1c96dc1a2533ffbbe35c984aedb4668ff0d7db22ba1f1f89f824fea",
+      "expected": "pass",
+      "hash_id": "67e9c3acebb154a282f326d4ff1951cd1f342e58e74d562b556b517da5e56132",
+      "reason": "verified_immutable_png_bytes_equal",
+      "verified_outcome": "pass"
+    },
+    {
+      "actual_SWAAG_tool_call_wall_s": 0.5038,
+      "category": "clean",
+      "durable_event_hash": "d541e1e4c75bf986d2ea3efc0f3b04024b5d9abac44e81ef5586306fd53f66b5",
+      "expected": "pass",
+      "hash_id": "35135aaa6cc23891b40cb3f378c53a17a1127210ce60e125ccf03efcfdaec458",
+      "reason": "verified_immutable_png_bytes_equal",
+      "verified_outcome": "pass"
+    },
+    {
+      "actual_SWAAG_tool_call_wall_s": 0.4389,
+      "category": "clean",
+      "durable_event_hash": "34a15b9b19fb0ace2f0d47b80563b13ad97a2c146483311d098b418709c5b144",
+      "expected": "pass",
+      "hash_id": "20e9c64c05a54d199610fb7e38135361324b5ed5dcf39c23afe9b48926c07376",
+      "reason": "verified_immutable_png_bytes_equal",
+      "verified_outcome": "pass"
+    },
+    {
+      "actual_SWAAG_tool_call_wall_s": 0.7195,
+      "category": "clean",
+      "durable_event_hash": "4445888a312030bc8a0c020e84cdd3dba1d224526e04cd1669ac25f36941d3f8",
+      "expected": "pass",
+      "hash_id": "3346f2bbf6c34bd2dbe28bd1bb657d0e9c37392a1d5ec9929e6a5df4763ddc2d",
+      "reason": "verified_immutable_png_bytes_equal",
+      "verified_outcome": "pass"
+    },
+    {
+      "actual_SWAAG_tool_call_wall_s": 0.5836,
+      "category": "changed",
+      "durable_event_hash": "e4a36a654c784e86a4236af2fdfe17159944e38a5dece4c8ec64c6cf3fbee8db",
+      "expected": "fail",
+      "hash_id": "7ed8f0f3b707956d9fb1e889e11153e0aa0a854983081d262fbe5eede32da7ca",
+      "reason": "verified_immutable_png_bytes_changed",
+      "verified_outcome": "fail"
+    },
+    {
+      "actual_SWAAG_tool_call_wall_s": 0.4985,
+      "category": "changed",
+      "durable_event_hash": "9b64f2b2aaae0ab3cd27332eb2cf740f08ad8a7f62ff044b668cc08b9d388c2f",
+      "expected": "fail",
+      "hash_id": "49d180ecf56132819571bf39d9b7b342522a2ac6d23c1418d3338251bfe469c8",
+      "reason": "verified_immutable_png_bytes_changed",
+      "verified_outcome": "fail"
+    },
+    {
+      "actual_SWAAG_tool_call_wall_s": 0.6805,
+      "category": "changed",
+      "durable_event_hash": "6a666be1bdb0439fbfdf97bd57bd2564b8df0bd207cf9ecba6564c08d1afd944",
+      "expected": "fail",
+      "hash_id": "1a6562590ef19d1045d06c4055742d38288e9e6dcd71ccde5cee80f1d5a774eb",
+      "reason": "verified_immutable_png_bytes_changed",
+      "verified_outcome": "fail"
+    },
+    {
+      "actual_SWAAG_tool_call_wall_s": 0.6116,
+      "category": "changed",
+      "durable_event_hash": "b4bb75c7255c943d582cd4e15ef94768736b9f59b4e71e0ac9d034d9dfa0f952",
+      "expected": "fail",
+      "hash_id": "96061e92f58e4bdcdee73df36183fe3ac64747c81c26f6c83aada8d2aabb1864",
+      "reason": "verified_immutable_png_bytes_changed",
+      "verified_outcome": "fail"
+    },
+    {
+      "actual_SWAAG_tool_call_wall_s": 0.4532,
+      "category": "changed",
+      "durable_event_hash": "ff76621a1060a26bb42a29e60c4d1821137699884e155cf29987fe6bc7ca37f9",
+      "expected": "fail",
+      "hash_id": "67e9c3acebb154a282f326d4ff1951cd1f342e58e74d562b556b517da5e56132",
+      "reason": "verified_immutable_png_bytes_changed",
+      "verified_outcome": "fail"
+    },
+    {
+      "actual_SWAAG_tool_call_wall_s": 0.6808,
+      "category": "changed",
+      "durable_event_hash": "f133e802a92fdd1b78ac13fc935ce5ddee2d233b4d6eec12bc18bd93684b4be8",
+      "expected": "fail",
+      "hash_id": "35135aaa6cc23891b40cb3f378c53a17a1127210ce60e125ccf03efcfdaec458",
+      "reason": "verified_immutable_png_bytes_changed",
+      "verified_outcome": "fail"
+    },
+    {
+      "actual_SWAAG_tool_call_wall_s": 0.481,
+      "category": "changed",
+      "durable_event_hash": "9060ed457cb681ff441a47b1294f97159fefd951184ae9afaac8fc2d23f9302c",
+      "expected": "fail",
+      "hash_id": "20e9c64c05a54d199610fb7e38135361324b5ed5dcf39c23afe9b48926c07376",
+      "reason": "verified_immutable_png_bytes_changed",
+      "verified_outcome": "fail"
+    },
+    {
+      "actual_SWAAG_tool_call_wall_s": 0.9378,
+      "category": "changed",
+      "durable_event_hash": "c597b5b60a425427994f492bc4203539ccc7380f5226b45f7e0b71df9d5b1406",
+      "expected": "fail",
+      "hash_id": "3346f2bbf6c34bd2dbe28bd1bb657d0e9c37392a1d5ec9929e6a5df4763ddc2d",
+      "reason": "verified_immutable_png_bytes_changed",
+      "verified_outcome": "fail"
+    },
+    {
+      "actual_SWAAG_tool_call_wall_s": 0.5794,
+      "category": "wrong_activity",
+      "durable_event_hash": "d8d8cc67ca732984fa4e14928d245ef7674ffe3adabd011e63491c0420c38b83",
+      "expected": "review",
+      "hash_id": "ec2e990b934dde55cb87300629cedfc21b15cd28bbcf77d8bbdc55359d7689da",
+      "reason": "attested_source_state_or_contract_unavailable",
+      "verified_outcome": "review"
+    },
+    {
+      "actual_SWAAG_tool_call_wall_s": 0.468,
+      "category": "wrong_activity",
+      "durable_event_hash": "a1eb8f2040e15bea09ffb4110ff8f5f29f9d1bee50693d97706961fa1303ce3c",
+      "expected": "review",
+      "hash_id": "a88a7902cb4ef697ba0b6759c50e8c10297ff58f942243de19b984841bfe1f73",
+      "reason": "attested_source_state_or_contract_unavailable",
+      "verified_outcome": "review"
+    },
+    {
+      "actual_SWAAG_tool_call_wall_s": 0.5112,
+      "category": "wrong_activity",
+      "durable_event_hash": "4751499bb548f0135f00ec4f860f450baef8e2db46bc2ae19ba67b3cb4235d30",
+      "expected": "review",
+      "hash_id": "3d914f9348c9cc0ff8a79716700b9fcd4d2f3e711608004eb8f138bcba7f14d9",
+      "reason": "attested_source_state_or_contract_unavailable",
+      "verified_outcome": "review"
+    },
+    {
+      "actual_SWAAG_tool_call_wall_s": 0.9226,
+      "category": "wrong_activity",
+      "durable_event_hash": "95f536e9842b4c09dd80f5815e718fb02d1809ac06c1c64fe072f1bdaca26379",
+      "expected": "review",
+      "hash_id": "8cd2510271575d8430c05368315a87b9c4784c7389a47496080c1e615a2a00b6",
+      "reason": "attested_source_state_or_contract_unavailable",
+      "verified_outcome": "review"
+    },
+    {
+      "actual_SWAAG_tool_call_wall_s": 0.5939,
+      "category": "wrong_activity",
+      "durable_event_hash": "a977ffcfde1674febeef375701f5918ca4440c2504ac9330bc344a04926baf01",
+      "expected": "review",
+      "hash_id": "9f1f9dce319c4700ef28ec8c53bd3cc8e6abe64c68385479ab89215806a5bdd6",
+      "reason": "attested_source_state_or_contract_unavailable",
+      "verified_outcome": "review"
+    },
+    {
+      "actual_SWAAG_tool_call_wall_s": 1.2643,
+      "category": "wrong_activity",
+      "durable_event_hash": "6798296ca30b7664f77225a79a41a41aa9894288745f54ff58063468ccd5bcd8",
+      "expected": "review",
+      "hash_id": "7902699be42c8a8e46fbbb4501726517e86b22c56a189f7625a6da49081b2451",
+      "reason": "attested_source_state_or_contract_unavailable",
+      "verified_outcome": "review"
+    },
+    {
+      "actual_SWAAG_tool_call_wall_s": 1.092,
+      "category": "wrong_activity",
+      "durable_event_hash": "f75fda03885bd9d9ec03c07d855d313b0baeecb996b7dc33129c4d09dd8052b3",
+      "expected": "review",
+      "hash_id": "9bdb2af6799204a299c603994b8e400e4b1fd625efdb74066cc869fee42c9df3",
+      "reason": "attested_source_state_or_contract_unavailable",
+      "verified_outcome": "review"
+    },
+    {
+      "actual_SWAAG_tool_call_wall_s": 0.844,
+      "category": "wrong_activity",
+      "durable_event_hash": "27aff9c845f82e80419aeb5f96366c0056860c00224b18d0a666bce97ec4883a",
+      "expected": "review",
+      "hash_id": "8d23cf6c86e834a7aa6eded54c26ce2bb2e74903538c61bdd5d2197997ab2f72",
+      "reason": "attested_source_state_or_contract_unavailable",
+      "verified_outcome": "review"
+    },
+    {
+      "actual_SWAAG_tool_call_wall_s": 1.3291,
+      "category": "truncated_final_png",
+      "durable_event_hash": "ea65449b0ab8853fc950b1431e8f5ef47a45d43e4987bc1fa066c1f084114b9d",
+      "expected": "review",
+      "hash_id": "7ed8f0f3b707956d9fb1e889e11153e0aa0a854983081d262fbe5eede32da7ca",
+      "reason": "png_final_pixels_or_end_boundary_not_verified",
+      "verified_outcome": "review"
+    },
+    {
+      "actual_SWAAG_tool_call_wall_s": 0.7237,
+      "category": "truncated_final_png",
+      "durable_event_hash": "315f65b26145117f6c9f15d18ce33558ea69809ba8417ec828b7a48960cd9077",
+      "expected": "review",
+      "hash_id": "49d180ecf56132819571bf39d9b7b342522a2ac6d23c1418d3338251bfe469c8",
+      "reason": "png_final_pixels_or_end_boundary_not_verified",
+      "verified_outcome": "review"
+    },
+    {
+      "actual_SWAAG_tool_call_wall_s": 0.8031,
+      "category": "truncated_final_png",
+      "durable_event_hash": "f543e0e10454a5fc55b5c1fa876508b24c23035da71da0c94f8e9c5a4f4336bc",
+      "expected": "review",
+      "hash_id": "1a6562590ef19d1045d06c4055742d38288e9e6dcd71ccde5cee80f1d5a774eb",
+      "reason": "png_final_pixels_or_end_boundary_not_verified",
+      "verified_outcome": "review"
+    },
+    {
+      "actual_SWAAG_tool_call_wall_s": 0.8447,
+      "category": "truncated_final_png",
+      "durable_event_hash": "f8a998307dc1bceb5848b3cf8f91229a048cc307d51b9c170981d8192a95570d",
+      "expected": "review",
+      "hash_id": "96061e92f58e4bdcdee73df36183fe3ac64747c81c26f6c83aada8d2aabb1864",
+      "reason": "png_final_pixels_or_end_boundary_not_verified",
+      "verified_outcome": "review"
+    },
+    {
+      "actual_SWAAG_tool_call_wall_s": 0.4789,
+      "category": "truncated_final_png",
+      "durable_event_hash": "f0bf61aa6cad04352c2d74dfc0a6fe078345aa0432e1114736b29ee9cd1161a4",
+      "expected": "review",
+      "hash_id": "67e9c3acebb154a282f326d4ff1951cd1f342e58e74d562b556b517da5e56132",
+      "reason": "png_final_pixels_or_end_boundary_not_verified",
+      "verified_outcome": "review"
+    },
+    {
+      "actual_SWAAG_tool_call_wall_s": 0.8464,
+      "category": "truncated_final_png",
+      "durable_event_hash": "a05779b905393ac970badd1a59cb8d958c497fb9562b0bdc6c8cb24ba2db9b4d",
+      "expected": "review",
+      "hash_id": "35135aaa6cc23891b40cb3f378c53a17a1127210ce60e125ccf03efcfdaec458",
+      "reason": "png_final_pixels_or_end_boundary_not_verified",
+      "verified_outcome": "review"
+    },
+    {
+      "actual_SWAAG_tool_call_wall_s": 0.8228,
+      "category": "truncated_final_png",
+      "durable_event_hash": "5cc85dd99fd429a297cc81de48be68555d54f146bd8ae3ca463687d262b5d2f0",
+      "expected": "review",
+      "hash_id": "20e9c64c05a54d199610fb7e38135361324b5ed5dcf39c23afe9b48926c07376",
+      "reason": "png_final_pixels_or_end_boundary_not_verified",
+      "verified_outcome": "review"
+    },
+    {
+      "actual_SWAAG_tool_call_wall_s": 0.6915,
+      "category": "truncated_final_png",
+      "durable_event_hash": "c3cee49b3defae778e4aab0cf9083887634e4794c3470c78483d951a5df2515d",
+      "expected": "review",
+      "hash_id": "3346f2bbf6c34bd2dbe28bd1bb657d0e9c37392a1d5ec9929e6a5df4763ddc2d",
+      "reason": "png_final_pixels_or_end_boundary_not_verified",
+      "verified_outcome": "review"
+    }
+  ],
+  "overall": "PARTIAL",
+  "prior_round9_real_runtime_report_SHA256": "359ac95403514fdac87eebf252c4b82831b2bd14e3c61df8a25f3da443f7b709",
+  "registered_tool_module_sha256": "a2453854d7502e89bca5e4e81d5d9c7e18789151e727391897c85294a8501ab2",
+  "separate_frozen_study_SHA256": "59036905c5269d29784a6ddb70d2705557c57f8a331d0f2ab4e626ed920042e5",
+  "source": "Real original RotBench Android PNG screenshots from an author-pinned 340-case release. The new evaluated source cases were taken from the previously unused 240-case portion plus independent same-app different-activity source controls. Invalid PNGs are SCRIPT-TRUNCATED duplicates of these real original PNGs.",
+  "source_capture_integrity_check": "8/8 changed source snapshots have author-modified decoded pixels, 8/8 clean snapshots match approved decoded pixels; each attachment SHA matches an independently frozen release or script-controlled capture SHA; each final PNG is actually decoded, not just its filename or dimensions.",
+  "source_distinct_app_negative_manifest_SHA256": "ede80b2b8d568887bcb926c7d738f676e54b2c2b76ee9146930ccaf0a4124659",
+  "source_manifest_independent_SHA256": "0cba9ddc3d40dfb1c997bdcbe6de7a46bb1adf8364fd11823e916a57f2870b96",
+  "source_negative": "8/8 preserved, legitimate different-Activity screens from 8 distinct apps were REVIEW, not an automatic visual FAIL.",
+  "source_prior_full_image_predictions_SHA256": "0414fb609ab5decba2f1a114dcb67eacba1f55ee9ca61dd647e8fc5cdc1bb7db"
+}

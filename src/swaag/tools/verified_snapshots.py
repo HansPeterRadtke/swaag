@@ -43,13 +43,15 @@ class HostAttestedSnapshot:
     approved_identity: RenderSourceBinding
     actual_identity: RenderSourceBinding
     manifest_sha256: str
+    approved_source_sha256: str
+    actual_capture_sha256: str
     reference_manifest_attested: bool
     rendered_state_attested: bool
     immutable_snapshot_contract: bool
 
 
 def _png_dimensions(path: Path) -> tuple[int, int] | None:
-    """Verify the PNG signature and IHDR size without decoding private pixels."""
+    """Read the PNG signature and IHDR size before stricter full decode."""
     try:
         with path.open("rb") as fp:
             header = fp.read(24)
@@ -64,6 +66,38 @@ def _png_dimensions(path: Path) -> tuple[int, int] | None:
     return width, height
 
 
+def _png_full_decode(path: Path, expected_size: tuple[int, int]) -> bool:
+    """Validate actual source pixels, CRCs and exact final IEND boundary.
+
+    Pillow is an intentionally optional dependency for this opt-in tool. If it
+    is absent, return REVIEW rather than trusting only a PNG filename/header.
+    Use strict image load instead of an LLM/visual-quality heuristic.
+    """
+    if _png_dimensions(path) != expected_size:
+        return False
+    try:
+        from PIL import Image
+        with path.open("rb") as fp:
+            fp.seek(-12, 2)
+            if fp.read(12) != b"\x00\x00\x00\x00IEND\xaeB`\x82":
+                return False
+        # .verify() checks PNG chunk integrity, while .load() actually
+        # decompresses pixels and detects missing/corrupt image data.
+        with Image.open(path) as probe:
+            if probe.format != "PNG" or probe.size != expected_size:
+                return False
+            probe.verify()
+        with Image.open(path) as decoded:
+            if decoded.format != "PNG" or decoded.size != expected_size:
+                return False
+            decoded.load()
+        return True
+    except Exception:  # noqa: BLE001 - malformed/unsupported images must abstain.
+        # PIL raises several distinct decoder/CRC/decompression-bomb errors.
+        # Never promote an unverified final image to snapshot PASS or FAIL.
+        return False
+
+
 class VerifyImmutableSnapshotTool(Tool):
     name = "verify_immutable_snapshot"
     description = (
@@ -76,7 +110,8 @@ class VerifyImmutableSnapshotTool(Tool):
         "Use only for an explicit immutable screenshot byte-equality contract. "
         "It does NOT judge clipped/overlapping text, contrast, semantics, "
         "user intent or the quality of 3D/video; never treat PASS as release approval. "
-        "The model cannot supply source state, revision or attestation flags."
+        "The model cannot supply source state, revision or attestation flags. "
+        "Requires the optional Pillow decoder dependency when enabled."
     )
     kind = "pure"
     required_runtime_capability = CAPABILITY
@@ -148,12 +183,24 @@ class VerifyImmutableSnapshotTool(Tool):
                 or attestation.actual_attachment_id != actual.attachment_id
                 or not isinstance(attestation.manifest_sha256, str)
                 or not _SHA.fullmatch(attestation.manifest_sha256)
+                or not isinstance(attestation.approved_source_sha256, str)
+                or not _SHA.fullmatch(attestation.approved_source_sha256)
+                or not isinstance(attestation.actual_capture_sha256, str)
+                or not _SHA.fullmatch(attestation.actual_capture_sha256)
                 or not isinstance(attestation.approved_identity, RenderSourceBinding)
                 or not isinstance(attestation.actual_identity, RenderSourceBinding)):
             output["reason"] = "missing_or_invalid_host_attestation"
             return ToolExecutionResult(self.name, output, stable_json_dumps(output, indent=2))
 
         output["host_manifest_sha256"] = attestation.manifest_sha256
+        # Unlike a self-reported attachment hash, the external host's expected
+        # SOURCE bytes must come from its independent manifest and expected
+        # TARGET bytes from its independent captured final output. Mismatches
+        # cannot be treated as a semantic GUI failure or screenshot PASS.
+        if (attestation.approved_source_sha256 != approved.sha256
+                or attestation.actual_capture_sha256 != actual.sha256):
+            output["reason"] = "host_source_or_capture_sha256_mismatch"
+            return ToolExecutionResult(self.name, output, stable_json_dumps(output, indent=2))
         # If either blob is missing/corrupt or dimensions differ, this is
         # unverified target integrity, not evidence of an actual GUI defect.
         try:
@@ -167,6 +214,10 @@ class VerifyImmutableSnapshotTool(Tool):
         if (_png_dimensions(approved_path) != expected_approved_size
                 or _png_dimensions(actual_path) != expected_actual_size):
             output["reason"] = "png_dimensions_or_header_do_not_match_attested_source"
+            return ToolExecutionResult(self.name, output, stable_json_dumps(output, indent=2))
+        if (not _png_full_decode(approved_path, expected_approved_size)
+                or not _png_full_decode(actual_path, expected_actual_size)):
+            output["reason"] = "png_final_pixels_or_end_boundary_not_verified"
             return ToolExecutionResult(self.name, output, stable_json_dumps(output, indent=2))
 
         verdict = decide_bound_immutable_snapshot(
