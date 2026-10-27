@@ -1,0 +1,159 @@
+{
+  "actual_qwen_llm_calls": 0,
+  "cost_and_final_outcomes_by_arm": {
+    "cautious_no_tool": {
+      "ABSTAIN_NEG": 3,
+      "ABSTAIN_POS": 3,
+      "FN": 0,
+      "FP": 0,
+      "TN": 0,
+      "TP": 0,
+      "durable_reopen_replay_successes": 6,
+      "planned_cases": 6,
+      "prompt_whitespace_word_proxy_total": 21156,
+      "scripted_model_requests_total": 12,
+      "source_grounded_final_correct_count": 0,
+      "source_read_success_but_wrong_final_count": 0,
+      "technical_failed_cases": 0,
+      "total_harness_wall_seconds": 15.11958,
+      "true_read_file_tool_call_count": 0,
+      "true_read_file_tool_result_count": 0,
+      "unverified_coincidental_correct_count": 0,
+      "verified_completed_cases": 6
+    },
+    "direct_yes_no_tool": {
+      "ABSTAIN_NEG": 0,
+      "ABSTAIN_POS": 0,
+      "FN": 0,
+      "FP": 3,
+      "TN": 0,
+      "TP": 3,
+      "durable_reopen_replay_successes": 6,
+      "planned_cases": 6,
+      "prompt_whitespace_word_proxy_total": 2700,
+      "scripted_model_requests_total": 6,
+      "source_grounded_final_correct_count": 0,
+      "source_read_success_but_wrong_final_count": 0,
+      "technical_failed_cases": 0,
+      "total_harness_wall_seconds": 8.85073,
+      "true_read_file_tool_call_count": 0,
+      "true_read_file_tool_result_count": 0,
+      "unverified_coincidental_correct_count": 3,
+      "verified_completed_cases": 6
+    },
+    "read_accurate": {
+      "ABSTAIN_NEG": 0,
+      "ABSTAIN_POS": 0,
+      "FN": 0,
+      "FP": 0,
+      "TN": 3,
+      "TP": 3,
+      "durable_reopen_replay_successes": 6,
+      "planned_cases": 6,
+      "prompt_whitespace_word_proxy_total": 44214,
+      "scripted_model_requests_total": 18,
+      "source_grounded_final_correct_count": 6,
+      "source_read_success_but_wrong_final_count": 0,
+      "technical_failed_cases": 0,
+      "total_harness_wall_seconds": 24.61842,
+      "true_read_file_tool_call_count": 6,
+      "true_read_file_tool_result_count": 6,
+      "unverified_coincidental_correct_count": 0,
+      "verified_completed_cases": 6
+    },
+    "read_inverted": {
+      "ABSTAIN_NEG": 0,
+      "ABSTAIN_POS": 0,
+      "FN": 3,
+      "FP": 3,
+      "TN": 0,
+      "TP": 0,
+      "durable_reopen_replay_successes": 6,
+      "planned_cases": 6,
+      "prompt_whitespace_word_proxy_total": 44214,
+      "scripted_model_requests_total": 18,
+      "source_grounded_final_correct_count": 0,
+      "source_read_success_but_wrong_final_count": 6,
+      "technical_failed_cases": 0,
+      "total_harness_wall_seconds": 24.5336,
+      "true_read_file_tool_call_count": 6,
+      "true_read_file_tool_result_count": 6,
+      "unverified_coincidental_correct_count": 0,
+      "verified_completed_cases": 6
+    }
+  },
+  "full_trial_wall_seconds": 73.72485,
+  "immutable_cases_sha256": "595f647586fe6bace2121b840d0ad4297bfb9e74b7ef185d37c4a16822a52c3f",
+  "models_scripted_not_qwen": true,
+  "original_files_and_original_model_prompts_not_committed": true,
+  "original_git_commit": "2f7667d71ae9a15bb4dcfe7ddb837aff38b79015",
+  "original_source_documents": {
+    "l1": {
+      "path": "docs/fast-long-history-candidates-2026-10-21.md",
+      "sha256": "0ca57219ccad1cc76893fe72e2e37561e18ff28bdc8cb70bd9e70607f540e7bf"
+    },
+    "l2": {
+      "path": "docs/fast-worker-world-context-2026-10-20.md",
+      "sha256": "ecd807546428758fe72fc40489d7eeff8133dabd777d68a6bc2b589edb8edecf"
+    },
+    "l3": {
+      "path": "docs/history-action-scope-2026-10-16.md",
+      "sha256": "78d72fd8b81d0abb06ce7e8967103c1aa7f2e41133360ad07b3a54804cc155a2"
+    }
+  },
+  "production_worker_side_effects": 0,
+  "provenance_limits": [
+    "The material consists of actual unmodified Git source documents, but the head-presence questions are six investigator-selected exact-string predicates and do not represent natural semantic relevance.",
+    "The actual SWAAG read_file, SQLite, source-event and final-turn paths run; fake model responses are scripted and deliberately correct/inverted by condition.",
+    "A model can be wrong despite complete source availability, and a correct looking unsupported answer remains unverified.",
+    "Six cases do not support general model error rates, and there are no human-written role-relevance gold labels.",
+    "Actual llm token counts, Qwen-GPU usage, complete specialist reviewer cost and training syntax auxiliary evidence remain unavailable."
+  ],
+  "source_labels_basis": "exact Markdown heading line in original SHA-checked Git object",
+  "technical_failures_no_semantic_grade": [],
+  "test_input_cases": [
+    {
+      "decoy_doc_id": "l2",
+      "doc": "l1",
+      "heading": "## Problem and measured cause",
+      "id": "l1_yes",
+      "independent_gold": true
+    },
+    {
+      "decoy_doc_id": "l2",
+      "doc": "l1",
+      "heading": "## Implemented data flow",
+      "id": "l1_no",
+      "independent_gold": false
+    },
+    {
+      "decoy_doc_id": "l1",
+      "doc": "l2",
+      "heading": "## Implemented data flow",
+      "id": "l2_yes",
+      "independent_gold": true
+    },
+    {
+      "decoy_doc_id": "l3",
+      "doc": "l2",
+      "heading": "# History reuse across ordinary action delivery — 2026-10-16",
+      "id": "l2_no",
+      "independent_gold": false
+    },
+    {
+      "decoy_doc_id": "l1",
+      "doc": "l3",
+      "heading": "# History reuse across ordinary action delivery — 2026-10-16",
+      "id": "l3_yes",
+      "independent_gold": true
+    },
+    {
+      "decoy_doc_id": "l1",
+      "doc": "l3",
+      "heading": "## Problem and measured cause",
+      "id": "l3_no",
+      "independent_gold": false
+    }
+  ],
+  "version": "independent_original_git_source_verdicts_v1_20261027"
+}
