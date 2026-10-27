@@ -1,0 +1,45 @@
+# SWAAG Agent Relevance and Reliability — final authorized checkpoint, October 27 before 06:00 Berlin
+
+**Owner objective: scientifically resolve relevance for user vs workers, numeric vs category ratings, single vs specialist/reviewer inference, and syntax auxiliary training. Overall result: PARTIAL.** Research and concrete harness fixes were completed and saved; one of the original model architecture hypotheses cannot be scientifically concluded from the permitted primary observations. This is the final checkpoint in the existing new project chat, not a new project or a scheduled continuation.
+
+## Original questions, conclusion, and exact evidence
+
+| Original question | Defensible conclusion | Essential evidence still missing |
+| --- | --- | --- |
+| What is relevant for user-facing vs worker vs orchestration tasks? | Relevance is purpose-, current-task-, authority-, evidence- and effect-specific. User response should lead with actual verified outcome; worker needs exact operative source and side-effect constraints; orchestrator needs dependencies, revisions, tools, admission and receipts. | Independent human role/purpose labels plus final owner SWAAG task correctness for an automatic selector. The 64 prior labels on 29 SWAAG excerpts are researcher-authored. The earlier 8-case evidence selector leaks supports as `r1/r2`. |
+| Numeric or textual ordinal category? | **Neither proven better**. Five genuinely paired Qwen inputs each matched **3/5** single-researcher anchors; numeric absolute error 10 versus text 16 (not calibrated probability). | Independent multi-rater role-conditioned relevance reference and actual end-result comparisons, with identical model, task, prompt sources and complete resource costs. |
+| One capable user-facing call or selection→specialist→reviewer? | Prefer a single initial user-facing call provisionally, escalate only when independently source/effect justified. Six matched Qwen direct final answers used **5,593 tokens / 20.874356 s**; selector stage-one alone **5,600 tokens / 21.826964 s**, with **no completed selector→answer chain**. | Real complete stage-two and reviewer outputs on the *same original SWAAG tasks*, independently graded final tool/user results, total model tokens, GPU queue/VRAM, wall cost, right→wrong and wrong→right reviewer changes. |
+| Auxiliary grammar/syntax training? | Published controlled studies show task-dependent benefits and regressions; no winning local Qwen auxiliary objective demonstrated. | Actual matched-start-weights, matched training-FLOP, same-corpus Qwen experiments plus independent heldout model and SWAAG agent outcomes; grammar prompt tags are not auxiliary training. |
+
+## Verified original Qwen evidence coverage
+
+Previous SHA-pinned audit of the **48 planned original real-Qwen conditions**: **9** completed full-context direct answers (researcher-answer-key evaluation), **4** completed separate researcher-gold-source selected answers (NOT automated selection), **8** completed first-stage selectors with **no final second answer**, **10** before-inference admission refusals and **17** cells never attempted. The underlying records contain **150 original journal events, only 94 unique events after removing 56 byte-identical overlaps**, with original source passages revalidated and eight role-coded label-leaking cases preserved. The 5-of-6 correct original researcher-key direct results in the six comparable source/model pairs are **not independent human verified worker results**. Stage-one cost exceeding direct on those six does not establish stage-two would be less accurate; stage-two is unobserved. Distinct oracle answers cannot be spliced into a fictional completed sequential chain.
+
+The dedicated Nitro worktree and corresponding GitHub branch were verified identical at **`daea7acb7545b520c1c6cd70b872002689e666d2`** at the start of this final checkpoint. Four previously modified/untracked files belonging to concurrent work remained protected and were **not** staged, edited, discarded, reset or force-pushed by this task. The original governing Infra guidelines and October 17–18/Sep 27 owner recording hashes were checked before final work. The original Qwen model comparison inputs and SHA-pinned event sources remain in the earlier research files; do not repeat previously denied Thor multi-stage tests/data moves.
+
+## No-duplicate-effect check completed at this checkpoint
+
+A **new independent, read-only, source-file-immutable journal audit** (no model calls or tools re-executed) inspected three prior test-only SWAAG result journals, verified the exact **Git HEAD** bytes match each tracked original, and checked unique attempted/completed case identities and per-case idempotent replay flags. Results:
+
+| Historical isolated experiment | Original attempted/completed final cases | Verified no-duplicate replay flags | Real sandbox tool-result receipts |
+| --- | ---: | ---: | ---: |
+| Foreground evidence-guard comparison | 46 / 46 | 46 / 46 | 2 calculator results |
+| Independent source-claim final-answer bridge | 12 / 12 | 12 / 12 | 0 |
+| Original Git document last-mile replication | 24 / 24 | 24 / 24 | 12 `read_file` results |
+| **Total** | **82 / 82** | **82 / 82** | **14** |
+
+No extra or duplicated case identity and no recorded technical case failure appeared in these journal artifacts. The signed/hashed tool/final events are original **isolated experiment receipts**. The original temporary SQLite payloads were not all kept, so their full cryptographic hash chains **cannot be independently reconstructed** from these compressed/archive receipts alone. This audit does **not** establish production-wide absence of duplicate effects; the live Nitro SQLite runtime previously had no matching owner model/task records to inspect, and other machine/source state is distinct.
+
+Source: `audit_final_duplicate_effect_receipts_20261027.py`, output `evidence/final-qwen-readiness/pre_0600_isolated_duplicate_effect_audit_v1.json`, and independent assertions `test_final_duplicate_effect_receipts_20261027.py`. Original case journals were only read, never replayed or rewritten.
+
+## Existing verified implementation findings and deployment boundary
+
+The round-eight real `HistoryStore` partial-JSONL-write race was independently reproduced, fixed on **this research Git branch** with a cross-process per-session journal lock and tested against unrelated-session writer blocking and permanent tamper. Original completed report: `ROUND8_HISTORY_APPEND_VISIBILITY_2026-10-26.md`; the repair is **not installed into production** and mixed-version writers/readers are not declared safe. Earlier final user-output tests established that a genuine source/tool receipt can precede a false final answer; a second model vote does not make the conclusion true. Original source-to-final/restart tests did verify complete saved-state identity on real file reads with **scripted** model decisions, not actual Qwen semantic reliability.
+
+External independent SciFact evidence, BEIR-NFCorpus cross-genre ranking and externally graded SWE-bench/Terminal-Bench source experiments remain bounded controls. The latter independently graded real software tasks show observable no-output is high-specificity but low recall, and a blind alternative agent can overwrite a correct result with a wrong one; seven model versions on twenty original tasks per benchmark are correlated repeats, not 140 independent examples. None supply local Qwen first-answer, reviewer, queue, VRAM or syntax-training evidence. The original policy choice should stay **one capable foreground call with task-role exact sources and independent tool-effect checking**, not unconditional standalone semantic selection or reviewer agreement.
+
+## Required future evidence if explicitly reauthorized after this checkpoint
+
+Freeze an original genuinely authorized owner SWAAG task collection with separate task/source revisions, independent effect/answer gold, true negative and paraphrase cases, and human relevance annotations by user/worker/orchestrator purpose. Under an expressly available GPU admission lease and *new* authorization for any previously denied remote machine operations, execute all actually completed direct and selector→specialist→reviewer conditions on identical tasks, track every stage's real tokens, first useful answer, total latency, queue, peak shared VRAM, model version/quantization and exact tool effects. Preserve bad and missing results, refused and never attempted cells, and reviewer wrong-to-right versus right-to-wrong errors. If such resource/permission is not granted, **do not run, reroute or score missing observations as success**. The separate syntax-auxiliary training question requires matched training compute and model initialization and cannot be settled by these inference tasks alone.
+
+No new calendar events, production changes, model restarts or unauthorized external effects are involved in this checkpoint. Overall research result is **PARTIAL** by the owner's definition because these independent real-Qwen final-model and training observations remain unavailable.

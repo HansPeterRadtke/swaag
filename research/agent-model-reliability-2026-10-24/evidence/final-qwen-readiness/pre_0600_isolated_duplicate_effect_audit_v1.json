@@ -1,0 +1,60 @@
+{
+  "inspected_studies": {
+    "foreground_guard": {
+      "distinct_finished_final_case_receipts": 46,
+      "distinct_isolated_case_attempts": 46,
+      "exact_original_event_kinds": {
+        "case_begin": 46,
+        "case_completed": 46,
+        "run_begin": 1,
+        "run_complete": 1
+      },
+      "original_journal_sha256": "020e25161704b8aa3f66b04e31c0a3795ccfc568f6e7346b0dfa7708757219e6",
+      "same_control_id_idempotent_replay_successes": 46,
+      "sandbox_tool_result_receipts": 2,
+      "technical_failed_case_receipts": 0,
+      "tracked_at_original_git_head": true
+    },
+    "independent_last_mile": {
+      "distinct_finished_final_case_receipts": 24,
+      "distinct_isolated_case_attempts": 24,
+      "exact_original_event_kinds": {
+        "all_cases_attempted": 1,
+        "immutable_protocol_begin": 1,
+        "isolated_case_begin": 24,
+        "isolated_case_completed": 24
+      },
+      "original_journal_sha256": "6ed306bafa3a8e6a15165eb1bc387ace4b0252dcc22f3c8833a087c70c6bb479",
+      "same_control_id_idempotent_replay_successes": 24,
+      "sandbox_tool_result_receipts": 12,
+      "technical_failed_case_receipts": 0,
+      "tracked_at_original_git_head": true
+    },
+    "source_policy": {
+      "distinct_finished_final_case_receipts": 12,
+      "distinct_isolated_case_attempts": 12,
+      "exact_original_event_kinds": {
+        "all_complete": 1,
+        "frozen_begin": 1,
+        "isolated_case_begin": 12,
+        "isolated_case_completed": 12
+      },
+      "original_journal_sha256": "d2956ad301c55bb4786da3041c92038143f3151f1bcf62506c222ffc80a0f17b",
+      "same_control_id_idempotent_replay_successes": 12,
+      "sandbox_tool_result_receipts": 0,
+      "technical_failed_case_receipts": 0,
+      "tracked_at_original_git_head": true
+    }
+  },
+  "limits": [
+    "This checks exact immutable test-journal final/control receipts only; the archived journals do not hold every original ephemeral SQLite payload.",
+    "These were isolated scripted-model research sessions and not proof of absence of duplicate effects in live owner production services.",
+    "Original Qwen stage-2 final responses and GPU queue measurements remain unavailable; no model operation was replayed.",
+    "The audit did not read/write production SQLite, inspect user messages, or interact with outside applications."
+  ],
+  "prior_source_git_revision": "daea7acb7545b520c1c6cd70b872002689e666d2",
+  "sum_distinct_final_case_receipts": 82,
+  "sum_sandbox_tool_results": 14,
+  "sum_verified_idempotent_replays": 82,
+  "version": "20261027_pre_0600_isolated_receipt_dedup_v1"
+}
