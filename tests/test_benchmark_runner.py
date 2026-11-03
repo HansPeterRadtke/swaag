@@ -358,3 +358,22 @@ def test_independent_probe_waits_for_dispatch_after_registration(monkeypatch):
     assert result == 'main completed'
     assert len(polls) == 3
     assert metrics['separate_assistant_runtime'] is True
+
+
+def test_conversation_benchmark_pins_only_its_isolated_foreground_prompt(tmp_path):
+    from swaag.benchmark.benchmark_runner import _build_config
+    from swaag.benchmark.task_definitions import get_benchmark_tasks
+
+    task = next(x for x in get_benchmark_tasks() if x.task_id == "conversation_identity_plain")
+    config = _build_config(
+        sessions_root=tmp_path / "sessions", workspace=tmp_path,
+        overrides=task.config_overrides, base_url="http://127.0.0.1:1",
+    )
+    assert config.prompts.standard_system_template == "system_foreground.txt"
+    assert config.tools.allow_side_effect_tools is False
+    with pytest.raises(ValueError, match="unsupported benchmark"):
+        _build_config(
+            sessions_root=tmp_path / "sessions", workspace=tmp_path,
+            overrides={"prompts_standard_system_template": "../../outside.txt"},
+            base_url="http://127.0.0.1:1",
+        )

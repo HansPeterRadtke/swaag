@@ -294,3 +294,35 @@ def test_multistep_semantic_contracts_do_not_require_byte_exact_formatting(tmp_p
     filesystem = tasks["multi_step_environment_list_read_write"].create(tmp_path / "filesystem")
     assert "key=value format" in filesystem.prompt
     assert "service=..." in filesystem.prompt and "version=..." in filesystem.prompt and "build=..." in filesystem.prompt
+
+
+def test_spoken_conversation_smoke_seeds_isolated_histories_and_verifiable_outcomes(tmp_path):
+    from swaag.benchmark.task_definitions import get_benchmark_tasks
+
+    cases = {task.task_id: task for task in get_benchmark_tasks() if task.task_id.startswith("conversation_")}
+    assert len(cases) == 6
+    assert all(task.config_overrides["prompts_standard_system_template"] == "system_foreground.txt" for task in cases.values())
+    for task_id, task in cases.items():
+        case = task.create(tmp_path, live_mode=True)
+        assert case.prompt.strip()
+        assert case.model_client is None
+        assert case.verification_contract.max_tool_calls == 0
+        assert case.verification_contract.forbid_unexpected_workspace_changes
+        assert case.verification_contract.expected_answer_contains
+        assert case.workspace == tmp_path / task_id
+        assert {p.name for p in case.workspace.iterdir()} == {"README.md"}
+    plain = cases["conversation_identity_plain"].create(tmp_path)
+    profane = cases["conversation_identity_profanity"].create(tmp_path)
+    assert not plain.history_messages and not profane.history_messages
+    assert plain.verification_contract.expected_answer_contains == ["SWAAG"]
+    assert profane.verification_contract.expected_answer_contains == ["SWAAG"]
+    followup = cases["conversation_followup_pronoun"].create(tmp_path)
+    assert len(followup.history_messages) == 3
+    assert [item.role for item in followup.history_messages] == ["user", "assistant", "user"]
+    assert followup.verification_contract.required_event_counts["message_added"] == 5
+    correction = cases["conversation_last_correction"].create(tmp_path)
+    assert len(correction.history_messages) == 3
+    assert correction.history_messages[-1].content.endswith("Eclipse instead.")
+    assert correction.verification_contract.expected_answer_regex
+    no_effect = cases["conversation_no_false_completion"].create(tmp_path)
+    assert "do not run anything" in no_effect.history_messages[0].content

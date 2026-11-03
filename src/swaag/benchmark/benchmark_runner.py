@@ -512,6 +512,14 @@ def _build_config(
         config.model.progress_poll_seconds = float(progress_poll_seconds)
     if seed is not None:
         config.model.seed = int(seed)
+    # An isolated conversational role must use the same user-facing system contract
+    # as the canonical foreground, rather than the generic developer-session role.
+    # This is an explicit benchmark-only override; no production config changes.
+    if "prompts_standard_system_template" in overrides:
+        template = str(overrides["prompts_standard_system_template"])
+        if template not in {"system_standard.txt", "system_foreground.txt"}:
+            raise ValueError("unsupported benchmark foreground system template")
+        config.prompts.standard_system_template = template
     config.tools.allow_side_effect_tools = bool(overrides.get("tools_allow_side_effect_tools", config.tools.allow_side_effect_tools))
     config.tools.allow_stateful_tools = bool(overrides.get("tools_allow_stateful_tools", config.tools.allow_stateful_tools))
     config.environment.max_capture_chars = int(overrides.get("environment_max_capture_chars", config.environment.max_capture_chars))
@@ -2180,6 +2188,15 @@ def _build_parser() -> argparse.ArgumentParser:
         "--json", action="store_true", help="Print the full JSON report."
     )
 
+    conversation_parser = subparsers.add_parser(
+        "conversation-acceptance",
+        help="Exercise actual canonical orchestrator.message in fresh isolated histories.",
+    )
+    conversation_parser.add_argument("--output", required=True)
+    conversation_parser.add_argument("--config", action="append", default=[])
+    conversation_parser.add_argument("--case", action="append", default=[])
+    conversation_parser.add_argument("--json", action="store_true")
+
     subparsers.add_parser("list", help="List available benchmark task ids.")
     external_parser = subparsers.add_parser("external", help="Run optional official external benchmark harness integrations.")
     external_parser.add_argument("external_args", nargs=argparse.REMAINDER, help="Arguments forwarded to the external benchmark runner.")
@@ -2189,6 +2206,18 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
+    if args.command == "conversation-acceptance":
+        from swaag.benchmark.conversation_acceptance import run_conversation_acceptance
+        report = run_conversation_acceptance(
+            output_dir=Path(args.output),
+            config_paths=[Path(path) for path in args.config],
+            case_ids=args.case,
+        )
+        if args.json:
+            print(stable_json_dumps(report, indent=2))
+        else:
+            print(f"canonical_conversation_passed={report['passed']}/{len(report['cases'])}")
+        return 0 if report['failed'] == 0 else 1
     if args.command == "list":
         tasks = _load_tasks(None, live_subset=False)
         for task in tasks:

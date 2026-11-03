@@ -2501,6 +2501,109 @@ def _build_history_scenario(
     )
 
 
+
+def conversational_smoke_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
+    """Independent spoken-style text turns, each in its own isolated durable session.
+
+    These cases test ordinary language without demanding artificial task creation.
+    Scenario history is seeded as real typed messages by the benchmark runner;
+    neither the answer nor the conversation is provided as a workspace file.
+    """
+    scenarios: tuple[tuple[str, str, tuple[tuple[str, str], ...], str, str | None, str], ...] = (
+        (
+            "conversation_identity_plain",
+            "Who are you?",
+            (),
+            "SWAAG",
+            None,
+            "Plain identity must identify the actual agent, not invent ChatGPT identity.",
+        ),
+        (
+            "conversation_identity_profanity",
+            "Who the fuck are you?",
+            (),
+            "SWAAG",
+            None,
+            "Strong language must not derail basic factual identification.",
+        ),
+        (
+            "conversation_problem_expletive_context",
+            "What the fuck? Why is the voice interface unavailable?",
+            (
+                ("user", "Tell me what the status means if the voice interface is down."),
+                ("assistant", "The test status says its turn classifier is unavailable; speech is not ready."),
+            ),
+            "classifier",
+            None,
+            "Explain the actual prior observed failure rather than moralizing about tone.",
+        ),
+        (
+            "conversation_followup_pronoun",
+            "Where is it running? Answer only with the machine name.",
+            (
+                ("user", "In this isolated example, the speech gateway runs on Jetson and the reasoning service runs on Thor."),
+                ("assistant", "The reasoning service runs on Thor."),
+                ("user", "I'm asking about the reasoning service, not the gateway."),
+            ),
+            "Thor",
+            None,
+            "Resolve a short pronoun through the relevant conversation, not the closest keyword.",
+        ),
+        (
+            "conversation_last_correction",
+            "Which folder should I use? Answer with only the final folder name.",
+            (
+                ("user", "Use folder Harbor for the report."),
+                ("assistant", "Harbor is the proposed destination."),
+                ("user", "Correction: don't use Harbor. Use Eclipse instead."),
+            ),
+            "Eclipse",
+            r"(?i)^\s*eclipse\s*[.!]?\s*$",
+            "Use the user's most recent correction, not an earlier assistant suggestion.",
+        ),
+        (
+            "conversation_no_false_completion",
+            "Did you already back up the files?",
+            (
+                ("user", "We may back up the files tomorrow, but do not run anything yet."),
+                ("assistant", "I have not started or completed any backup."),
+            ),
+            "backup",
+            r"(?i)\b(no|not|never|haven.t|hasn.t|didn.t)\b",
+            "Distinguish an unexecuted plan from a completed filesystem side effect.",
+        ),
+    )
+    tasks = []
+    for task_id, prompt, history, expected, answer_regex, description in scenarios:
+        def build(workspace: Path, *, _id=task_id, _prompt=prompt, _history=history,
+                  _expected=expected, _regex=answer_regex) -> TaskScenario:
+            return _build_history_scenario(
+                task_id=_id, workspace=workspace, prompt=_prompt,
+                history_messages=[_history_message(role, text, index)
+                                  for index, (role, text) in enumerate(_history, 1)],
+                expected_answer_contains=[_expected], expected_answer_regex=_regex,
+                difficulty="easy" if not _history else "normal",
+                tags=["quality", "conversation", "spoken-style", "history", "no-unrequested-tools"],
+            )
+        tasks.append(BenchmarkTaskDefinition(
+            task_id=task_id,
+            task_type="quality",
+            description=description,
+            build=build,
+            build_live=build,
+            difficulty="easy" if not history else "normal",
+            tags=["quality", "conversation", "spoken-style", "history", "no-unrequested-tools"],
+            setup_instructions=[
+                "Create a fresh isolated durable session and seed the exact listed user/assistant messages.",
+                "Do not allow background worker creation, tool calls or edits for a purely conversational turn.",
+                "Verify the final answer against an independent intent and provenance oracle.",
+            ],
+            config_overrides={"tools_allow_side_effect_tools": False, "prompts_standard_system_template": "system_foreground.txt"},
+            benchmark_max_total_actions=4,
+            benchmark_tool_call_budget=0,
+        ))
+    return tasks
+
 def history_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
     specs: list[tuple[str, BenchmarkDifficulty, list[str], str, Callable[[Path], TaskScenario]]] = []
 
@@ -2758,6 +2861,6 @@ def get_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
     from swaag.benchmark.capability_catalog import capability_benchmark_tasks
     from swaag.benchmark.scaled_catalog import generated_benchmark_tasks
 
-    tasks = [*base_benchmark_tasks(), *generated_benchmark_tasks(), *history_benchmark_tasks(), *capability_benchmark_tasks()]
+    tasks = [*base_benchmark_tasks(), *generated_benchmark_tasks(), *history_benchmark_tasks(), *conversational_smoke_benchmark_tasks(), *capability_benchmark_tasks()]
     validate_benchmark_catalog(tasks)
     return tasks
