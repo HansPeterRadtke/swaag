@@ -85,6 +85,11 @@ def run_conversation_acceptance(
         operation_id = 'conversation-acceptance-' + task.task_id
         workers_count = -1
         history_events: list[Any] = []
+        repeated_checks: dict[str, bool] = {
+            'duplicate_receipt_observed': False,
+            'duplicate_answer_unchanged': False,
+            'duplicate_history_unchanged': False,
+        }
         try:
             operation = service.orchestrator_operations.get(operation_id)
             if operation is None:
@@ -102,6 +107,16 @@ def run_conversation_acceptance(
             state = service._load_orchestrator_state()
             history_events = service.orchestrator_runtime.history.read_history(state.session_id)
             workers_count = len(service.workers.store.list(include_archived=False))
+            # Repeated delivery with the same operation ID MUST recover its
+            # finished receipt rather than submitting a new user turn.
+            if recorded.get('status') == 'completed':
+                repeated_response = service.orchestrator_message(scenario.prompt, operation_id=operation_id)
+                repeated_history = service.orchestrator_runtime.history.read_history(state.session_id)
+                repeated_checks = {
+                    'duplicate_receipt_observed': repeated_response.get('duplicate') is True,
+                    'duplicate_answer_unchanged': repeated_response.get('answer') == response.get('answer'),
+                    'duplicate_history_unchanged': [(e.sequence, e.event_type, e.hash) for e in repeated_history] == [(e.sequence, e.event_type, e.hash) for e in history_events],
+                }
         except Exception as exc:
             error = f'{type(exc).__name__}: {exc}'
         finally:
@@ -114,7 +129,22 @@ def run_conversation_acceptance(
         observed_user = [e for e in history_events if e.event_type == 'message_added'
                          and isinstance(e.payload.get('message'), dict)
                          and e.payload['message'].get('role') == 'user']
+        all_messages = [e.payload['message'] for e in history_events
+                        if e.event_type == 'message_added'
+                        and isinstance(e.payload.get('message'), dict)]
+        expected_messages = ([(msg.role, msg.content) for msg in scenario.history_messages]
+                             + [('user', scenario.prompt), ('assistant', answer)])
+        checks.update(repeated_checks)
+        if scenario.oracle is not None and scenario.oracle.ask_user is False:
+            # Independent behavioral oracle; answer-keyword matching alone can
+            # otherwise incorrectly pass a needless blocking clarification.
+            checks['no_unnecessary_question'] = not any(
+                e.event_type == 'agent_question' for e in history_events)
         checks.update({
+            'exact_authoritative_history': [
+                (str(msg.get('role') or ''), str(msg.get('content') or ''))
+                for msg in all_messages
+            ] == expected_messages,
             'durable_operation_completed': recorded.get('status') == 'completed',
             'zero_tools_used': not any(e.event_type == 'tool_called' for e in history_events),
             'zero_workers_created': workers_count == 0,

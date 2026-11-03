@@ -452,7 +452,7 @@ def test_reexpanded_completion_evidence_projects_only_after_overflow(
     make_config, tmp_path
 ) -> None:
     config = make_config(
-        model__context_limit=900,
+        model__context_limit=1400,
         context__max_compaction_rounds=3,
     )
     config.sessions.root = tmp_path / "sessions"

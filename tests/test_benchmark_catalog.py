@@ -300,7 +300,7 @@ def test_spoken_conversation_smoke_seeds_isolated_histories_and_verifiable_outco
     from swaag.benchmark.task_definitions import get_benchmark_tasks
 
     cases = {task.task_id: task for task in get_benchmark_tasks() if task.task_id.startswith("conversation_")}
-    assert len(cases) == 6
+    assert len(cases) == 17
     assert all(task.config_overrides["prompts_standard_system_template"] == "system_foreground.txt" for task in cases.values())
     for task_id, task in cases.items():
         case = task.create(tmp_path, live_mode=True)
@@ -326,3 +326,15 @@ def test_spoken_conversation_smoke_seeds_isolated_histories_and_verifiable_outco
     assert correction.verification_contract.expected_answer_regex
     no_effect = cases["conversation_no_false_completion"].create(tmp_path)
     assert "do not run anything" in no_effect.history_messages[0].content
+
+
+def test_canonical_history_long_context_uses_actual_early_messages(tmp_path):
+    from swaag.benchmark.task_definitions import conversational_smoke_benchmark_tasks
+    tasks = {x.task_id:x for x in conversational_smoke_benchmark_tasks()}
+    task = tasks['conversation_long_history_original_authority'].create(tmp_path)
+    assert len(task.history_messages) == 42
+    assert task.history_messages[0].content.endswith('Kestrel.')
+    assert task.history_messages[-1].role == 'assistant'
+    assert task.verification_contract.required_event_counts['message_added'] == 44
+    assert task.verification_contract.max_tool_calls == 0
+    assert tasks['conversation_quoted_instruction_not_action'].create(tmp_path).verification_contract.max_tool_calls == 0

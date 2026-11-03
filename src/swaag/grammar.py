@@ -504,17 +504,26 @@ def agent_action_contract(tool_specs: Iterable[tuple], *, allow_silent_completio
                         "importance": {"type": "string", "enum": ["minor", "normal", "major", "critical"]},
                     }
                 ),
-                "questions": _array(
-                    _closed_object(
-                        {
-                            "question": _string(),
-                            "criticality": {"type": "string", "enum": ["optional", "blocking"]},
-                            "importance": {"type": "string", "enum": ["minor", "normal", "major", "critical"]},
-                            "reason": _string(),
-                            "assumption_if_unanswered": _string(),
-                        }
-                    )
-                ),
+                "questions": _array({"anyOf": [
+                    # The validator requires an empty assumption for blocking
+                    # questions. Encode that exact invariant during constrained
+                    # decoding rather than repeatedly rejecting the same
+                    # otherwise plausible model action after generation.
+                    _closed_object({
+                        "question": _string(),
+                        "criticality": {"type": "string", "enum": ["blocking"]},
+                        "importance": {"type": "string", "enum": ["minor", "normal", "major", "critical"]},
+                        "reason": _string(),
+                        "assumption_if_unanswered": {"type": "string", "enum": [""]},
+                    }),
+                    _closed_object({
+                        "question": _string(),
+                        "criticality": {"type": "string", "enum": ["optional"]},
+                        "importance": {"type": "string", "enum": ["minor", "normal", "major", "critical"]},
+                        "reason": _string(),
+                        "assumption_if_unanswered": _string(),
+                    }),
+                ]}),
             }
         ),
     )

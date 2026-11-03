@@ -28,7 +28,11 @@ def test_action_backwards_compatible_missing_questions():
 def test_contract_requires_structured_questions():
     schema = agent_action_contract([]).json_schema
     assert "questions" in schema["required"]
-    assert schema["properties"]["questions"]["items"]["properties"]["criticality"]["enum"] == ["optional", "blocking"]
+    variants = schema["properties"]["questions"]["items"]["anyOf"]
+    kinds = {variant["properties"]["criticality"]["enum"][0] for variant in variants}
+    assert kinds == {"optional", "blocking"}
+    blocking = next(variant for variant in variants if variant["properties"]["criticality"]["enum"] == ["blocking"])
+    assert blocking["properties"]["assumption_if_unanswered"]["enum"] == [""]
 
 
 def test_optional_question_requires_assumption_and_user_facing_disclosure():

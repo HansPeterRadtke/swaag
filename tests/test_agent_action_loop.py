@@ -1605,6 +1605,47 @@ def test_benchmark_answer_fragments_are_case_insensitive_and_support_alternative
     assert report.checks["expected_answer_contains"] is True
     assert report.checks["expected_answer_any_of"] is True
 
+def test_action_question_schema_forces_empty_blocking_assumption_at_generation_time() -> None:
+    from swaag.grammar import agent_action_contract
+    from swaag.schema_portability import assert_portable_json_schema
+    from swaag.tools.base import _validate_schema_value, ToolValidationError
+
+    contract = agent_action_contract([])
+    assert_portable_json_schema(contract.json_schema)
+    question = contract.json_schema["properties"]["questions"]["items"]
+    assert "anyOf" in question and len(question["anyOf"]) == 2
+    blocking, optional = question["anyOf"]
+    assert blocking["properties"]["criticality"]["enum"] == ["blocking"]
+    assert blocking["properties"]["assumption_if_unanswered"]["enum"] == [""]
+    assert optional["properties"]["criticality"]["enum"] == ["optional"]
+    sample = {
+        "question": "Which destination do you authorize?",
+        "criticality": "blocking",
+        "importance": "normal",
+        "reason": "The destination is not known.",
+        "assumption_if_unanswered": "",
+    }
+    _validate_schema_value(sample, question, path="questions[0]")
+    with pytest.raises(ToolValidationError):
+        _validate_schema_value({**sample, "assumption_if_unanswered": "Use default"}, question, path="questions[0]")
+    # Portable JSON Schema deliberately excludes minLength, so an optional
+    # empty assumption is still rejected by the independent action parser.
+    optional_empty = {**sample, "criticality": "optional", "assumption_if_unanswered": ""}
+    _validate_schema_value(optional_empty, question, path="questions[0]")
+    from swaag.action import action_from_payload, ActionValidationError
+    action = {
+        "assistant_message": "Which destination do you authorize?",
+        "tool_calls": [], "continue_loop": False, "silent_completion": False,
+        "response_constraints": {"exact_word_count": None},
+        "status": {"just_happened": "", "situation": "No destination",
+                   "action": "Ask", "reason": "Missing destination", "importance": "normal"},
+        "questions": [optional_empty],
+    }
+    with pytest.raises(ActionValidationError, match="must state the provisional assumption"):
+        action_from_payload(action, enabled_tool_names=[])
+    _validate_schema_value({**sample, "criticality": "optional", "assumption_if_unanswered": "Wait for approval"}, question, path="questions[0]")
+
+
 def test_action_schema_disallows_silent_completion_by_default() -> None:
     from swaag.grammar import agent_action_contract
     schema = agent_action_contract([]).json_schema
