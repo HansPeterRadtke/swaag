@@ -22,6 +22,9 @@ def test_foreground_snapshot_distinguishes_actual_configured_coder_and_default_w
         assert routing['foreground']['configured_profile']=='fixture-coder-foreground-profile'
         assert routing['foreground']['base_url']=='http://127.0.0.1:18733/v1'
         assert routing['default_worker']['requested_model_id']=='fixture-q8-worker-model'
+        assert routing['this_user_facing_response_model']['configured_identity'] == 'fixture-coder-foreground-model'
+        assert routing['this_user_facing_response_model']['role'] == 'foreground'
+        assert 'NOT default_worker' in routing['this_user_facing_response_model']['instruction']
         assert routing['default_worker']['base_url']=='http://127.0.0.1:18735/v1'
         assert routing['evidence_scope']=='configured SWAAG runtime routes, not verified remote model binaries'
         exposed=snapshot_prompt_view(snapshot,123)

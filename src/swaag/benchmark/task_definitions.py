@@ -2597,6 +2597,14 @@ def conversational_smoke_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
             "Distinguish an unexecuted plan from a completed filesystem side effect.",
         ),
         (
+            "conversation_explicit_model_identity",
+            "Which underlying model are you running? Answer with its model identity.",
+            (),
+            "qwen3-coder-30b-a3b-instruct-q4-k-m",
+            None,
+            "Explicit user request for technical model identity must override abbreviated self-introduction.",
+        ),
+        (
             "conversation_identity_german",
             "Wie heißt du? Bitte antworte nur mit deinem Namen.",
             (),

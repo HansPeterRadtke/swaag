@@ -270,15 +270,37 @@ def generate_fast_foreground_response(
             mode, result, message, current_world=state_view.get("worker_world"),
         )
         if mode == "answer":
-            if re.search(
+            unperformed_action = re.search(
                 r"\b(?:I\s+(?:will|need to|am going to|shall)|I['’]ll|let me|"
                 r"I\s*(?:am|'m)\s+(?:checking|starting|stopping|running|investigating))\b",
                 result, flags=re.IGNORECASE,
-            ):
-                # This is a consistency/fail-closed gate over the model's own
-                # generated reply, not a deterministic interpretation of the
-                # user's instruction. Incomplete action claims go to SWAAG.
-                mode = "delegate"
+            )
+            if unperformed_action:
+                # "I am running the X model" is a factual response to an
+                # explicit model-identity question, not an execution promise.
+                # Admit it only when the exact named model agrees with the
+                # independent configured foreground identity. A different model
+                # name or any actual "I am running tests" stays delegated.
+                model_statement = re.fullmatch(
+                    r"I\s+(?:am|'m)\s+running\s+the\s+"
+                    r"(?:(.+?)\s+model|model\s+(.+?))[.!]?\s*",
+                    result, flags=re.IGNORECASE,
+                )
+                configured_model = str(runtime.config.model.model_identity or '').strip()
+                stated_model = (
+                    next((part for part in model_statement.groups() if part), '').strip()
+                    if model_statement else ''
+                )
+                confirmed_identity = bool(
+                    model_statement and configured_model
+                    and stated_model.casefold() == configured_model.casefold()
+                    and re.search(r"\b(?:which|what|underlying|running|model)\b",
+                                  message, flags=re.IGNORECASE)
+                )
+                if not confirmed_identity:
+                    # Narrow consistency gate over the proposed speech; tool
+                    # promises still go to the authoritative controller.
+                    mode = "delegate"
         return FastForegroundResponse(
             mode=mode, reply=result,
             budget_input_tokens=compiled.report.input_tokens,

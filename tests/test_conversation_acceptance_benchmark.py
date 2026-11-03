@@ -7,7 +7,7 @@ from swaag.benchmark import benchmark_runner
 
 def test_canonical_conversation_cases_have_distinct_isolated_authoritative_histories(tmp_path):
     cases = conversational_smoke_benchmark_tasks()
-    assert len(cases) == 17
+    assert len(cases) == 18
     for case in cases:
         scenario = case.create(tmp_path, live_mode=True)
         assert scenario.workspace.parent == tmp_path
@@ -85,3 +85,18 @@ def test_canonical_restart_operational_phase_is_declared_and_bounded(tmp_path):
     from swaag.benchmark.conversation_restart_acceptance import run_phase
     with pytest.raises(ValueError, match='phase must be first or second'):
         run_phase(output_dir=tmp_path, config_paths=[], phase='invalid')
+
+
+def test_voice_identity_speech_style_preserves_explicit_model_exception(tmp_path):
+    from swaag.benchmark.task_definitions import conversational_smoke_benchmark_tasks
+    catalog = {x.task_id:x for x in conversational_smoke_benchmark_tasks()}
+    assert 'conversation_explicit_model_identity' in catalog
+    assert catalog['conversation_explicit_model_identity'].create(tmp_path).verification_contract.expected_answer_contains == [
+        'qwen3-coder-30b-a3b-instruct-q4-k-m'
+    ]
+    root=Path(__file__).parents[1]/'src/swaag/assets/prompts'
+    for fn in ('foreground_fast_system.txt','system_foreground.txt'):
+        text=(root/fn).read_text()
+        assert ('Identity:' in text or 'Conversation identity rule:' in text)
+        assert ('explicitly ask which model' in text or 'if the user explicitly asks for the underlying model name' in text)
+        assert 'I am SWAAG, your local voice assistant.' in text

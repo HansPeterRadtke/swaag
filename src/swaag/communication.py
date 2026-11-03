@@ -2025,6 +2025,21 @@ class CommunicationService:
                     "configured_profile": self.workers.runtime.config.model.profile_name,
                     "base_url": self.workers.runtime.config.model.base_url,
                 },
+                # Direct fast replies already know their own model. Preserve
+                # that exact independently sourced identity in the full/deep
+                # fallback too, so its foreground Coder never misreports the
+                # worker Q8 model as its own when fast inference is unavailable.
+                "this_user_facing_response_model": {
+                    "configured_identity": self.orchestrator_runtime.config.model.model_identity,
+                    "role": "foreground",
+                    "instruction": (
+                        "This is the configured identity of the model currently generating "
+                        "your user-facing response, NOT default_worker for delegated work. "
+                        "If asked which model YOU use, report this configured foreground "
+                        "identity, never the default worker model. The configured route "
+                        "does not independently attest the backend binary."
+                    ),
+                },
                 "evidence_scope": "configured SWAAG runtime routes, not verified remote model binaries",
             },
             "orchestrator": {

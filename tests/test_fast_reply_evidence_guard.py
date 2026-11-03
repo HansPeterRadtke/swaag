@@ -198,3 +198,45 @@ def test_combined_hearing_check_and_greeting_can_finish_as_grounded_one_call(mak
         assert client.requests[0]['contract'] == 'fast_foreground_response'
     finally:
         service.close()
+
+
+
+def test_fast_model_identity_is_a_fact_not_an_unperformed_model_action(make_config):
+    from swaag.foreground_fast import generate_fast_foreground_response
+    config = make_config(
+        model__model_identity='configured-coder-foreground',
+        model__context_limit=32000,
+    )
+    for statement in (
+        'I am running the configured-coder-foreground model.',
+        'I am running the model configured-coder-foreground.',
+    ):
+        service, runtime, client = setup(make_config, [fast('answer', statement)])
+        try:
+            runtime.config.model.model_identity = config.model.model_identity
+            state = service._orchestrator_state()
+            selected = generate_fast_foreground_response(
+                runtime, state, 'Which underlying model are you running?')
+            assert selected is not None
+            assert selected.mode == 'answer'
+            assert selected.reply == statement
+            assert len(client.requests) == 1
+        finally:
+            service.close()
+
+
+def test_fast_other_model_or_running_tests_remains_delegated(make_config):
+    for spoken, user in [
+        ('I am running the incorrect-worker-model model.', 'Which underlying model are you running?'),
+        ('I am running the test suite now.', 'Did you run the test suite?'),
+    ]:
+        service, runtime, client = setup(make_config, [fast('answer', spoken)])
+        try:
+            runtime.config.model.model_identity = 'configured-coder-foreground'
+            state = service._orchestrator_state()
+            selected = generate_fast_foreground_response(runtime, state, user)
+            assert selected is not None
+            assert selected.mode == 'delegate'
+            assert len(client.requests) == 1
+        finally:
+            service.close()
