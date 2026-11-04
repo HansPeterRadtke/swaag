@@ -2540,6 +2540,54 @@ def conversational_smoke_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
             "Strong language must not derail basic factual identification.",
         ),
         (
+            "conversation_bare_expletive_ambiguous",
+            "What the fuck?",
+            (),
+            "?",
+            r"(?s)\?\s*$",
+            "A context-free spoken expletive requires a concise genuine clarification, never a fabricated diagnosis or work item.",
+        ),
+        (
+            "conversation_bare_expletive_english_variant",
+            "What the hell?",
+            (),
+            "What happened?",
+            r"(?i)\?\s*$",
+            "Short standalone English frustration requires relevant clarification, not assistant identity or action.",
+        ),
+        (
+            "conversation_bare_expletive_abbreviation",
+            "WTF?",
+            (),
+            "What happened?",
+            r"(?i)\?\s*$",
+            "Acronym profanity does not become a command or assistant self-introduction.",
+        ),
+        (
+            "conversation_bare_expletive_german",
+            "Was zur Hölle?",
+            (),
+            "Was ist passiert?",
+            r"(?i)\?\s*$",
+            "Bare German frustration needs a short clarification in German, never a fabricated incident.",
+        ),
+        (
+            "conversation_bare_expletive_german_other",
+            "Was zum Teufel?",
+            (),
+            "Was ist passiert?",
+            r"(?i)\?\s*$",
+            "An unseen German expletive variant should not produce English or an assistant identity.",
+        ),
+        (
+            "conversation_identity_german_rude",
+            "Wer bist du verdammt noch mal?",
+            (),
+            "Ich bin SWAAG",
+            r"(?i)\bich bin SWAAG\b",
+            "A rude German identity question still requires the assistant's identity in German.",
+        ),
+        (
             "conversation_problem_expletive_context",
             "What the fuck? Why is the voice interface unavailable?",
             (
@@ -2796,7 +2844,17 @@ def conversational_smoke_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
             # These selected cases each have one historical referent or a
             # self-contained answer. Asking a blocking question is a failure,
             # even if its text happens to contain an expected keyword.
-            scenario.oracle = ObservableBehaviorOracle(ask_user=False)
+            # Context-free frustrated speech does not specify a problem.
+            # Unlike the grounded history cases, the correct speech act is
+            # a short clarification rather than inventing a diagnosis.
+            scenario.oracle = ObservableBehaviorOracle(
+                ask_user=_id in {
+                    "conversation_bare_expletive_ambiguous",
+                    "conversation_bare_expletive_english_variant",
+                    "conversation_bare_expletive_abbreviation",
+                    "conversation_bare_expletive_german",
+                    "conversation_bare_expletive_german_other",
+                })
             return scenario
         tasks.append(BenchmarkTaskDefinition(
             task_id=task_id,
