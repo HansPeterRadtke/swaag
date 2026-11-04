@@ -7,7 +7,7 @@ from swaag.benchmark import benchmark_runner
 
 def test_canonical_conversation_cases_have_distinct_isolated_authoritative_histories(tmp_path):
     cases = conversational_smoke_benchmark_tasks()
-    assert len(cases) == 18
+    assert len(cases) == 24
     for case in cases:
         scenario = case.create(tmp_path, live_mode=True)
         assert scenario.workspace.parent == tmp_path
@@ -100,3 +100,29 @@ def test_voice_identity_speech_style_preserves_explicit_model_exception(tmp_path
         assert ('Identity:' in text or 'Conversation identity rule:' in text)
         assert ('explicitly ask which model' in text or 'if the user explicitly asks for the underlying model name' in text)
         assert 'I am SWAAG, your local voice assistant.' in text
+
+def test_reference_grounding_suite_has_independent_temporal_and_action_oracles(tmp_path):
+    from swaag.benchmark.task_definitions import conversational_smoke_benchmark_tasks
+    cases = {
+        x.task_id: x
+        for x in conversational_smoke_benchmark_tasks()
+        if x.task_id.startswith("conversation_reference_")
+    }
+    assert len(cases) == 6
+    for name, task in cases.items():
+        scenario = task.create(tmp_path, live_mode=True)
+        assert scenario.prompt
+        assert len(scenario.history_messages) == 2
+        assert [msg.role for msg in scenario.history_messages] == ["user", "assistant"]
+        assert scenario.oracle is not None and scenario.oracle.ask_user is False
+        assert scenario.verification_contract.max_tool_calls == 0
+        assert scenario.verification_contract.forbid_unexpected_workspace_changes
+        assert scenario.verification_contract.expected_answer_contains
+        assert scenario.verification_contract.required_event_counts["message_added"] == 4
+    reported = cases["conversation_reference_reported_upload_past"].create(tmp_path)
+    assert "original is safe" in reported.history_messages[0].content
+    current = cases["conversation_reference_fresh_check_unknown"].create(tmp_path)
+    assert "right now" in current.prompt
+    assert current.verification_contract.expected_answer_regex
+    quoted = cases["conversation_reference_quoted_deletion_past"].create(tmp_path)
+    assert "only an example" in quoted.history_messages[0].content

@@ -90,3 +90,62 @@ Production deployment remains gated on a robust held-out model-backed
 improvement without degrading identity, safety, current-state freshness or
 one-call fast-path semantics. A large passing deterministic unit suite alone
 does not close this semantic defect.
+
+## New independent canonical history-reference cases, November 4 early morning
+
+Six additional examples were specified from intended behavior before the first
+SWAAG run and added to the durable canonical conversation acceptance catalog.
+These are development regression examples, not a statistically representative
+or untouched outer holdout. Every case uses a unique isolated session with
+chronological messages, exact durable operation and duplicate receipt
+verification, no tool or worker permission, and unchanged workspace.
+Case names start with conversation_reference_:
+
+- reported_upload_past: an upload stalled but the recording was safe; answer
+  the explicitly historical question without a redundant current status check
+- short_it: a single recently failed archive restore is the referent of "it"
+- unpublished_report: report never published; answer historical nonpublication
+- fresh_check_unknown: "right now" with no current receipt cannot be guessed
+- quoted_deletion_past: quoted command is not evidence or authorization
+- german_previous_upload: German "Was ist damit passiert?" refers to the
+  previously reported failed upload
+
+Actual production-config canonical Coder acceptance on Thor, saved under
+/data/var/swaag-benchmarks/conversation-20261103/night3/reference-live-20261104/
+passed SIX OF SIX unique cases, with no worker creation, tool calls, false
+completed effects, duplicate durable operations, or workspace mutations.
+The respective wall times were 1.075, 0.862, 17.214, 19.910, 1.650 and
+19.946 seconds. Slow cases required three model calls instead of one.
+Correctness does NOT imply good low-latency user interaction. The earlier
+colloquial "What the fuck happened to it?" after a reported stalled phone
+upload still FAILS and was not replaced by an easier prompt to inflate success.
+
+The original research PDFs retrieved using Raspi KnowMoreDiRT were read as
+raw material, not only inferred from semantic snippets. Fuchs, Katz and
+Goldberg, You Know What I Mean: A Benchmark for Agentic Conversational
+Reference Grounding (EMNLP 2026), define RepoRef with 400 conversations from
+92 repositories, 23 communities and 7,781 messages. Their evaluation uses
+22 read-only GitHub APIs for uniquely grounded external issues, PRs or commits,
+explicitly filtering ambiguous references and retaining message authorship and
+time. SWAAG needs separate measured evaluation classes for (a) answers grounded
+in current chat, (b) unique external resource references requiring authorized
+read-only searches, (c) truly ambiguous references requiring clarification,
+and (d) fresh external state. Our present six historical conversation cases
+are only (a) and a freshness check, NOT reproduction of RepoRef.
+
+Shan et al., Model Interruption Bench: Evaluating Real-Time Error Correction
+in Full-Duplex Voice Agents (EMNLP 2026), explicitly separate decision whether
+to interrupt, interruption timing and correctness of the content. Backchannels
+are not actionable interruptions. Its measured gap between text detection and
+correctly timed actual-audio interruption means typed classifier success and
+correct WSS transport are not equivalent to natural full-duplex behavior.
+SWAAG still needs real noisy audio, false backchannel-interruption rates,
+late corrections, right-to-speak timing and no harmful actions from unfinished
+or superseded utterances. This aligns with the actual Infra recording-derived
+agents/voice_turn_taking_and_priority.md guideline.
+
+The exact private original PDFs are in Raspi Knowledge Library:
+ai-agents/2026-acl-agent-tool-evaluation/2026.emnlp-main.2084.pdf
+ai-agents/agent-reliability-and-automation/2026-model-interruption-bench-evaluating-real-time-error-correction-in-full-duplex-8956cef824.pdf
+
+Raw PDFs, tokens, speech waveforms and private conversations remain outside Git.

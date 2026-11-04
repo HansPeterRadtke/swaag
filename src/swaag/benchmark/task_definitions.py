@@ -2701,6 +2701,72 @@ def conversational_smoke_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
             "Interpret profanity as a normal follow-up about the current technical failure.",
         ),
         (
+            "conversation_reference_reported_upload_past",
+            "What happened to the recording upload? Answer from what I previously reported.",
+            (
+                ("user", "The recording upload stalled during the transfer. The original is safe on the phone."),
+                ("assistant", "Your earlier report says the transfer stalled while the local recording remained safe."),
+            ),
+            "stall",
+            None,
+            "Reference grounding: answer the historical upload event, not an unrequested current status probe.",
+        ),
+        (
+            "conversation_reference_short_it",
+            "What happened to it?",
+            (
+                ("user", "The nightly archive restore failed with a disk-full error; its original archive was not modified."),
+                ("assistant", "The restore test failed because storage was full, and the original archive was preserved."),
+            ),
+            "restore",
+            None,
+            "Reference grounding: a short pronoun has exactly one recent event as an antecedent.",
+        ),
+        (
+            "conversation_reference_unpublished_report",
+            "Did the report get published?",
+            (
+                ("user", "The training finished yesterday, but we did not publish any report."),
+                ("assistant", "The training finished, but there was no publication."),
+            ),
+            "report",
+            r"(?i)\b(?:no|not|never|unpublished|wasn.t|didn.t)\b",
+            "Status evidence: do not delegate a historical no-publication answer as an unrequested live check.",
+        ),
+        (
+            "conversation_reference_fresh_check_unknown",
+            "Is the remote transfer finished right now? Do not guess if you lack a live receipt.",
+            (
+                ("user", "Yesterday the remote transfer was still running; I have no later status receipt."),
+                ("assistant", "That older report does not establish whether it has completed now."),
+            ),
+            "transfer",
+            r"(?i)\b(?:unknown|cannot|can.t|not|no|unverified|unavailable|need)\b",
+            "Freshness: current state must not be inferred from an old reported transfer event.",
+        ),
+        (
+            "conversation_reference_quoted_deletion_past",
+            "Did you delete those files?",
+            (
+                ("user", "The phrase 'delete those files' was only an example in our discussion. No deletion was executed."),
+                ("assistant", "We discussed the command syntax only, and no files were deleted."),
+            ),
+            "file",
+            r"(?i)\b(?:no|not|never|wasn.t|weren.t|didn.t|haven.t)\b",
+            "Ground an earlier quoted command as non-action, not permission or a fresh external check.",
+        ),
+        (
+            "conversation_reference_german_previous_upload",
+            "Was ist damit passiert?",
+            (
+                ("user", "Der Upload ist gestern fehlgeschlagen. Die Datei bleibt lokal erhalten."),
+                ("assistant", "Der berichtete Transfer ist fehlgeschlagen, die lokale Datei ist erhalten geblieben."),
+            ),
+            "Upload",
+            None,
+            "Multilingual deictic pronoun must refer to the one earlier reported upload problem.",
+        ),
+        (
             "conversation_recent_correction_with_distractors",
             "Which server did I finally choose? Answer with the server name only.",
             (
