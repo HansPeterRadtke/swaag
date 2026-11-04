@@ -1,0 +1,322 @@
+{
+  "description": "Held-out-format real voice classifier semantic oracle; fixed human-authored synthetic utterances; no real phone audio or secrets",
+  "provenance": "Owner-guidelines voice turn-taking, gateway classification behavior, 2026-11-04 isolated Qwen3-VL smoke results",
+  "recorded_runtime_behavior_not_included": true,
+  "cases": [
+    {
+      "case_id": "base_turn_completion_identity",
+      "family": "turn_completion",
+      "text": "Who are you?",
+      "expected": true,
+      "assistant_text": null,
+      "language": "en",
+      "source_group": "base"
+    },
+    {
+      "case_id": "base_turn_completion_brief_profanity",
+      "family": "turn_completion",
+      "text": "What the fuck?",
+      "expected": true,
+      "assistant_text": null,
+      "language": "en",
+      "source_group": "base"
+    },
+    {
+      "case_id": "base_turn_completion_finished_simple",
+      "family": "turn_completion",
+      "text": "Can you hear me?",
+      "expected": true,
+      "assistant_text": null,
+      "language": "en",
+      "source_group": "base"
+    },
+    {
+      "case_id": "base_turn_completion_completed_correction",
+      "family": "turn_completion",
+      "text": "Use folder Alpha... no, not Alpha, use Beta.",
+      "expected": true,
+      "assistant_text": null,
+      "language": "en",
+      "source_group": "base"
+    },
+    {
+      "case_id": "base_turn_completion_tentative_folder",
+      "family": "turn_completion",
+      "text": "Use folder Alpha... I mean",
+      "expected": false,
+      "assistant_text": null,
+      "language": "en",
+      "source_group": "base"
+    },
+    {
+      "case_id": "base_turn_completion_unfinished_clause",
+      "family": "turn_completion",
+      "text": "I was going to",
+      "expected": false,
+      "assistant_text": null,
+      "language": "en",
+      "source_group": "base"
+    },
+    {
+      "case_id": "base_turn_completion_unfinished_object",
+      "family": "turn_completion",
+      "text": "Please open the",
+      "expected": false,
+      "assistant_text": null,
+      "language": "en",
+      "source_group": "base"
+    },
+    {
+      "case_id": "base_turn_completion_question_fragment",
+      "family": "turn_completion",
+      "text": "What is the",
+      "expected": false,
+      "assistant_text": null,
+      "language": "en",
+      "source_group": "base"
+    },
+    {
+      "case_id": "base_turn_completion_filler",
+      "family": "turn_completion",
+      "text": "uh",
+      "expected": false,
+      "assistant_text": null,
+      "language": "en",
+      "source_group": "base"
+    },
+    {
+      "case_id": "base_turn_completion_hold_command",
+      "family": "turn_completion",
+      "text": "Wait, no, don't send that.",
+      "expected": true,
+      "assistant_text": null,
+      "language": "en",
+      "source_group": "base"
+    },
+    {
+      "case_id": "base_turn_completion_trailing_conjunction",
+      "family": "turn_completion",
+      "text": "I need a moment because",
+      "expected": false,
+      "assistant_text": null,
+      "language": "en",
+      "source_group": "base"
+    },
+    {
+      "case_id": "base_turn_completion_gratitude",
+      "family": "turn_completion",
+      "text": "Thank you.",
+      "expected": true,
+      "assistant_text": null,
+      "language": "en",
+      "source_group": "base"
+    },
+    {
+      "case_id": "base_turn_completion_german_question",
+      "family": "turn_completion",
+      "text": "Wer bist du?",
+      "expected": true,
+      "assistant_text": null,
+      "language": "de",
+      "source_group": "base"
+    },
+    {
+      "case_id": "base_turn_completion_german_fragment",
+      "family": "turn_completion",
+      "text": "Ich wollte eigentlich",
+      "expected": false,
+      "assistant_text": null,
+      "language": "de",
+      "source_group": "base"
+    },
+    {
+      "case_id": "base_turn_completion_german_correction",
+      "family": "turn_completion",
+      "text": "Benutze Ordner A, nein, doch Ordner B.",
+      "expected": true,
+      "assistant_text": null,
+      "language": "de",
+      "source_group": "base"
+    },
+    {
+      "case_id": "base_turn_completion_german_partial",
+      "family": "turn_completion",
+      "text": "Kannst du mir bitte",
+      "expected": false,
+      "assistant_text": null,
+      "language": "de",
+      "source_group": "base"
+    },
+    {
+      "case_id": "base_turn_completion_german_finished",
+      "family": "turn_completion",
+      "text": "Die App ist noch nicht fertig.",
+      "expected": true,
+      "assistant_text": null,
+      "language": "de",
+      "source_group": "base"
+    },
+    {
+      "case_id": "initial_interruption_hello",
+      "family": "interruption",
+      "text": "Can you hear me?",
+      "expected": true,
+      "assistant_text": "The assistant is speaking its previous response.",
+      "language": "en",
+      "source_group": "initial"
+    },
+    {
+      "case_id": "initial_interruption_correction",
+      "family": "interruption",
+      "text": "That is not what I said.",
+      "expected": true,
+      "assistant_text": "The assistant is speaking its previous response.",
+      "language": "en",
+      "source_group": "initial"
+    },
+    {
+      "case_id": "initial_interruption_question",
+      "family": "interruption",
+      "text": "Why did you do that?",
+      "expected": true,
+      "assistant_text": "The assistant is speaking its previous response.",
+      "language": "en",
+      "source_group": "initial"
+    },
+    {
+      "case_id": "initial_interruption_profanity",
+      "family": "interruption",
+      "text": "What the fuck are you doing?",
+      "expected": true,
+      "assistant_text": "The assistant is speaking its previous response.",
+      "language": "en",
+      "source_group": "initial"
+    },
+    {
+      "case_id": "initial_interruption_change",
+      "family": "interruption",
+      "text": "I want to try something different.",
+      "expected": true,
+      "assistant_text": "The assistant is speaking its previous response.",
+      "language": "en",
+      "source_group": "initial"
+    },
+    {
+      "case_id": "initial_interruption_yes",
+      "family": "interruption",
+      "text": "yeah",
+      "expected": false,
+      "assistant_text": "The assistant is speaking its previous response.",
+      "language": "en",
+      "source_group": "initial"
+    },
+    {
+      "case_id": "initial_interruption_mhm",
+      "family": "interruption",
+      "text": "mhm",
+      "expected": false,
+      "assistant_text": "The assistant is speaking its previous response.",
+      "language": "en",
+      "source_group": "initial"
+    },
+    {
+      "case_id": "initial_interruption_ack",
+      "family": "interruption",
+      "text": "okay",
+      "expected": false,
+      "assistant_text": "The assistant is speaking its previous response.",
+      "language": "en",
+      "source_group": "initial"
+    },
+    {
+      "case_id": "initial_interruption_hesitation",
+      "family": "interruption",
+      "text": "um",
+      "expected": false,
+      "assistant_text": "The assistant is speaking its previous response.",
+      "language": "en",
+      "source_group": "initial"
+    },
+    {
+      "case_id": "initial_interruption_ack2",
+      "family": "interruption",
+      "text": "right",
+      "expected": false,
+      "assistant_text": "The assistant is speaking its previous response.",
+      "language": "en",
+      "source_group": "initial"
+    },
+    {
+      "case_id": "acknowledgment_interruption_right",
+      "family": "interruption",
+      "text": "right",
+      "expected": false,
+      "assistant_text": "The assistant is speaking its previous response.",
+      "language": "en",
+      "source_group": "acknowledgment"
+    },
+    {
+      "case_id": "acknowledgment_interruption_sure",
+      "family": "interruption",
+      "text": "sure",
+      "expected": false,
+      "assistant_text": "The assistant is speaking its previous response.",
+      "language": "en",
+      "source_group": "acknowledgment"
+    },
+    {
+      "case_id": "acknowledgment_interruption_gotit",
+      "family": "interruption",
+      "text": "got it",
+      "expected": false,
+      "assistant_text": "The assistant is speaking its previous response.",
+      "language": "en",
+      "source_group": "acknowledgment"
+    },
+    {
+      "case_id": "acknowledgment_interruption_correct",
+      "family": "interruption",
+      "text": "correct",
+      "expected": false,
+      "assistant_text": "The assistant is speaking its previous response.",
+      "language": "en",
+      "source_group": "acknowledgment"
+    },
+    {
+      "case_id": "acknowledgment_interruption_yep",
+      "family": "interruption",
+      "text": "yep",
+      "expected": false,
+      "assistant_text": "The assistant is speaking its previous response.",
+      "language": "en",
+      "source_group": "acknowledgment"
+    },
+    {
+      "case_id": "acknowledgment_interruption_right_stop",
+      "family": "interruption",
+      "text": "Right, stop talking now.",
+      "expected": true,
+      "assistant_text": "The assistant is speaking its previous response.",
+      "language": "en",
+      "source_group": "acknowledgment"
+    },
+    {
+      "case_id": "acknowledgment_interruption_right_change",
+      "family": "interruption",
+      "text": "Right, use folder Beta instead.",
+      "expected": true,
+      "assistant_text": "The assistant is speaking its previous response.",
+      "language": "en",
+      "source_group": "acknowledgment"
+    },
+    {
+      "case_id": "acknowledgment_interruption_new_question",
+      "family": "interruption",
+      "text": "Why are you talking?",
+      "expected": true,
+      "assistant_text": "The assistant is speaking its previous response.",
+      "language": "en",
+      "source_group": "acknowledgment"
+    }
+  ]
+}
