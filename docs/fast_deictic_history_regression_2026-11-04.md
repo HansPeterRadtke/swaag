@@ -225,3 +225,23 @@ too slow for ordinary voice responsiveness. Production readiness still
 requires the dedicated semantic turn classifier and physical Blackview
 microphone/speaker tests. No live service or model was restarted, and
 no file owned by the concurrent classifier agent was staged.
+
+## Post-commit independent retest, November 4 before 06:00
+
+After commit 665a4e0, a NEW independent four-case canonical live-model
+acceptance run was executed against the committed source and real current
+Thor Coder model. All four passed with zero tool executions: reported
+stalled upload in 1.776 seconds, short archive-restore pronoun in 1.431
+seconds, German previous upload in 1.796 seconds, and two distinct recent
+outcomes (failed recording upload vs successful data import) in 16.496
+seconds. The last, more ambiguous case used two model calls and asked a
+qualified clarifying question after accurately describing both outcomes;
+it is still too slow for a natural voice reply. The original one-step
+quick path cannot be claimed universally reliable from this corpus.
+These test operations were strictly isolated; the new per-case receipts
+and full chronological histories remain privately under
+/data/var/swaag-benchmarks/conversation-20261103/night6/final-german-history-postcommit/.
+No previous uncertain calendar delivery was repeated. The dedicated
+semantic classifier still refused connections, and the physical G3
+Blackview still reported ADB unauthorized. No model, worker, phone,
+production voice service or external data was restarted or modified.
