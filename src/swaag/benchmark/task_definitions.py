@@ -2749,6 +2749,17 @@ def conversational_smoke_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
             "Interpret profanity as a normal follow-up about the current technical failure.",
         ),
         (
+            "conversation_two_ambiguous_failures",
+            "What the fuck happened to it?",
+            (
+                ("user", "Yesterday the recording upload failed, but the data import succeeded. They are separate processes with no later updates."),
+                ("assistant", "You reported that the recording upload failed while the data import succeeded; no newer state was checked."),
+            ),
+            "upload",
+            r"(?is)^(?:(?=.*\bupload\b\s+(?:was\s+)?(?:failed|stalled))(?=.*\bimport\b\s+(?:was\s+)?(?:succeeded|completed))|(?=.*\bupload\b)(?=.*\bimport\b)(?=.*\?)(?=.*\b(?:which|mean|referring)\b)).*$",
+            "Two distinct antecedents with different outcomes: either identify BOTH reported outcomes accurately or ask which, without guessing one.",
+        ),
+        (
             "conversation_reference_reported_upload_past",
             "What happened to the recording upload? Answer from what I previously reported.",
             (
@@ -2848,7 +2859,10 @@ def conversational_smoke_benchmark_tasks() -> list[BenchmarkTaskDefinition]:
             # Unlike the grounded history cases, the correct speech act is
             # a short clarification rather than inventing a diagnosis.
             scenario.oracle = ObservableBehaviorOracle(
-                ask_user=_id in {
+                # When two distinct outcomes are explicitly in history,
+                # a precise two-part recap OR a short referent question is
+                # safe; neither may fabricate a single target or side effect.
+                ask_user=None if _id == "conversation_two_ambiguous_failures" else _id in {
                     "conversation_bare_expletive_ambiguous",
                     "conversation_bare_expletive_english_variant",
                     "conversation_bare_expletive_abbreviation",

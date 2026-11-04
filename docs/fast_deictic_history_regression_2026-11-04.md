@@ -149,3 +149,79 @@ ai-agents/2026-acl-agent-tool-evaluation/2026.emnlp-main.2084.pdf
 ai-agents/agent-reliability-and-automation/2026-model-interruption-bench-evaluating-real-time-error-correction-in-full-duplex-8956cef824.pdf
 
 Raw PDFs, tokens, speech waveforms and private conversations remain outside Git.
+
+## November 4, after 04:30: source correction with real model and durable history
+
+The previous failures above remain exact historical evidence from earlier
+revisions; they are NOT the state of the latest SOURCE CANDIDATE.
+A new narrow source change now handles the original unambiguous stalled
+recording-upload follow-up directly on the foreground model. The
+foreground instruction remains under 2,100 characters and explicitly
+distinguishes earlier USER-reported evidence from CURRENT observations,
+one salient antecedent from multiple plausible antecedents, and quoted
+words from authorized commands. Prior user speech is never independent
+verification of external live state.
+
+A second actual model failure was also identified: when a user asked
+whether a remote transfer finished and explicitly prohibited guessing
+without a live receipt, the deep model repeatedly emitted an EMPTY
+terminal assistant message, with continue_loop=false, silent_completion=false
+and no tools. The independent validator CORRECTLY rejected six such
+terminal actions, making a simple truthful status take about 72 seconds.
+The semantic error was interpreting "do not guess" as "say nothing."
+A new instruction in the deep agent_action_user.txt template explicitly
+requires a concise honest, NONEMPTY terminal answer explaining that
+current verification is unavailable. It may not invent a tool result,
+user authorization or external state. A test-only actual Coder experiment
+with this instruction reduced the status case to 18.946 seconds with
+zero invalid-action retry loops.
+
+The independent referent-recovery instruction requires considering
+actual chronological USER reports before asking a blocking referent
+question. It may answer from one salient historical event, but must
+not invent current status, or blindly choose one of several equally
+plausible antecedents. Both additions were then tested TOGETHER in
+the current actual source, not credited only from separate candidates.
+
+A new 31st canonical conversation case has two distinct recent
+outcomes: recording upload FAILED while data import SUCCEEDED.
+The user's underspecified "What the fuck happened to it?" can be
+answered safely by stating BOTH reported outcomes or asking which
+was meant; it must not silently merge the two processes. The independent
+oracle checks contrasting outcomes and preserves zero tool/worker
+side effects, chronological history and duplicate-operation idempotency.
+
+A FRESH EIGHT-case production-config canonical Coder run of the installed
+source candidate passed eight of eight. The original stalled recording
+upload follow-up was answered by ONE fast model call in 1.070 seconds,
+with local recording preservation and no unnecessary question or
+workers. The contrasting-outcome case used one model call in 1.132
+seconds, the archive-restore referent in 0.943 seconds, unpublished
+report in 0.816 seconds, quoted deletion in 1.792 seconds, identity
+in 0.896 seconds and bare frustration in 0.600 seconds. Explicit
+current remote transfer status was NOT invented: the full controller
+reported no current receipt, in 18.940 seconds using three model calls,
+zero invalid terminal actions and no unauthorized tools.
+
+Exact private canonical receipts and complete chronological logs remain
+outside Git under:
+/data/var/swaag-benchmarks/conversation-20261103/night5/history-and-terminal-installed-05/
+/data/var/swaag-benchmarks/conversation-20261103/night5/deep-referent-policy-regressions-02/
+/data/var/swaag-benchmarks/conversation-20261103/night5/deep-empty-terminal-guard-03/
+
+A last-minute test-only wording candidate that forced a spoken
+"you reported" phrase in the fast system prompt DID NOT generalize:
+it caused extra delegation of already-known upload/report history.
+Its negative result is preserved in
+/data/var/swaag-benchmarks/conversation-20261103/night5/fast_history_provenance_wording_ab.json
+and it was NOT installed. Semantic correctness, provenance language,
+dispatch mode, and response latency are separate evaluation dimensions.
+A nonempty response mentioning the right noun alone is insufficient.
+
+This expanded canonical conversation suite is development regression
+coverage, not a statistically representative spoken English/German
+dataset nor an untouched outer holdout. The deep status path is still
+too slow for ordinary voice responsiveness. Production readiness still
+requires the dedicated semantic turn classifier and physical Blackview
+microphone/speaker tests. No live service or model was restarted, and
+no file owned by the concurrent classifier agent was staged.

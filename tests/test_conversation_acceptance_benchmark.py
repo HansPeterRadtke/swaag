@@ -7,7 +7,7 @@ from swaag.benchmark import benchmark_runner
 
 def test_canonical_conversation_cases_have_distinct_isolated_authoritative_histories(tmp_path):
     cases = conversational_smoke_benchmark_tasks()
-    assert len(cases) == 30
+    assert len(cases) == 31
     for case in cases:
         scenario = case.create(tmp_path, live_mode=True)
         assert scenario.workspace.parent == tmp_path
@@ -178,3 +178,35 @@ def test_multilingual_short_spoken_frustration_and_identity_are_distinct(tmp_pat
     identity=tasks['conversation_identity_german_rude'].create(tmp_path)
     assert identity.verification_contract.expected_answer_contains == ["Ich bin SWAAG"]
     assert identity.verification_contract.expected_answer_regex
+
+
+def test_two_equally_plausible_recent_referents_require_a_question(tmp_path):
+    from swaag.benchmark.task_definitions import conversational_smoke_benchmark_tasks
+    task=next(x for x in conversational_smoke_benchmark_tasks()
+              if x.task_id=='conversation_two_ambiguous_failures')
+    case=task.create(tmp_path)
+    assert len(case.history_messages)==2
+    assert 'recording upload' in case.history_messages[0].content
+    assert 'data import' in case.history_messages[0].content
+    assert case.oracle.ask_user is None
+    assert case.verification_contract.max_tool_calls == 0
+    assert case.verification_contract.expected_answer_contains == ['upload']
+    assert all(_answer_checks('The recording upload failed, but the data import succeeded.',case.verification_contract).values())
+    assert all(_answer_checks('Which do you mean, the recording upload or the data import?',case.verification_contract).values())
+    assert not all(_answer_checks('The upload failed.',case.verification_contract).values())
+    assert not all(_answer_checks('The recording upload succeeded and the data import failed.',case.verification_contract).values())
+
+
+def test_fast_and_deep_freshness_fences_are_present_in_authoritative_templates():
+    root=Path(__file__).parents[1]/'src/swaag/assets/prompts'
+    fast=(root/'foreground_fast_system.txt').read_text()
+    deep=(root/'agent_action_user.txt').read_text()
+    assert len(fast)<2100
+    assert 'Answer from recent USER reports as evidence of what was said, not live status' in fast
+    assert 'If "it" refers to ONE salient recent event' in fast
+    assert 'if TWO equally plausible referents exist, ask which' in fast
+    assert 'Current-status checks, actions, actual tools' in fast
+    assert 'Historical referent check BEFORE asking' in deep
+    assert 'If two or more recent equally plausible referents compete' in deep
+    assert 'Do-not-guess is NOT a request for silence' in deep
+    assert 'Never leave assistant_message empty merely because current evidence is missing' in deep

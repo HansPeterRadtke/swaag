@@ -300,7 +300,7 @@ def test_spoken_conversation_smoke_seeds_isolated_histories_and_verifiable_outco
     from swaag.benchmark.task_definitions import get_benchmark_tasks
 
     cases = {task.task_id: task for task in get_benchmark_tasks() if task.task_id.startswith("conversation_")}
-    assert len(cases) == 30
+    assert len(cases) == 31
     assert all(task.config_overrides["prompts_standard_system_template"] == "system_foreground.txt" for task in cases.values())
     for task_id, task in cases.items():
         case = task.create(tmp_path, live_mode=True)
