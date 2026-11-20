@@ -116,6 +116,8 @@ answer supported by those receipts.
 The observed verdict was exactly:
 verified_after_supervisor_correction
 
+A subsequent independent verifier-integrity regression identified and repaired false acceptance of fabricated, mismatched or duplicated journal receipts and generic unsupported final answers. The preserved live session still passes the hardened checks. See `read-only-demo-verifier-integrity-2026-11-20.md` for the real/synthetic distinction and measured first-token delays.
+
 It was NOT verified_first_pass. Additional pure unit tests ensure this
 verifier refuses a fabricated assistant claim, a changed source read,
 wrong arithmetic, a missing terminal event, or false recovery status.

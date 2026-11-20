@@ -63,7 +63,9 @@ def event_data(tmp_path,*,wrong_calc=False,spoofed_only=False,wrong_read=False,c
             'output':{'expression':expr,'result':0 if wrong_calc else 10}})
     if completed:
         add('message_added',{'message':{'role':'assistant',
-            'content':'Ten tests total, source functions verified, answer supported.'}})
+            'content':('Ten tests total: 7 + 3 = 10 in tests/test_history_replay.py and tests/test_storage_boundaries.py; '
+                       'test_external_history_tampering_is_still_detected_with_file_stat_cache '
+                       'and test_session_storage_rejects_symlink_escape.')}})
         add('turn_completed',{})
     path=tmp_path/'fake_events_for_verifier_unit_test.jsonl'
     path.write_text(''.join(json.dumps(r)+'\n' for r in values))
@@ -107,7 +109,7 @@ def test_real_error_then_second_corrective_turn_is_distinguished(tmp_path):
         'validated_input':{'expression':'7 + 3'},
         'output':{'expression':'7 + 3','result':10}})
     add('message_added',{'message':{'role':'assistant',
-      'content':'Ten tests total: seven and three. '
+      'content':'Ten tests total: seven and three in tests/test_history_replay.py and tests/test_storage_boundaries.py. '
        'test_external_history_tampering_is_still_detected_with_file_stat_cache '
        'test_session_storage_rejects_symlink_escape. 0 + 0 was wrong; 7 + 3 corrected.'}})
     add('turn_finished',{})
@@ -118,3 +120,69 @@ def test_real_error_then_second_corrective_turn_is_distinguished(tmp_path):
     assert result['separate_correction_turn_observed']
     assert result['checks']['final_answer_is_source_grounded']
     assert result['checks']['actual_correct_calculator_operation']
+
+
+def test_unpaired_and_corrupt_tool_receipts_are_rejected(tmp_path):
+    """A tool-looking event is not evidence unless its matching call actually ran."""
+    import copy
+    for scenario in ("orphan", "mismatched_requested_path", "duplicate",
+                     "wrong_tool_name", "result_before_call"):
+        path=event_data(tmp_path,wrong_calc=scenario=="orphan")
+        rows=[json.loads(line) for line in path.read_text().splitlines()]
+        if scenario=="orphan":
+            rows.insert(-2,row(0,'tool_result',{'call_id':'never-called',
+                'tool_name':'calculator','validated_input':{'expression':'7 + 3'},
+                'output':{'expression':'7 + 3','result':10}}))
+        elif scenario=="mismatched_requested_path":
+            for entry in rows:
+                if entry['type']=='tool_called' and entry['payload'].get('call_id')=='source-2':
+                    entry['payload']['tool_input']={'path':'tests/unrelated.py'}
+        elif scenario=="duplicate":
+            idx=next(i for i,e in enumerate(rows) if e['type']=='tool_result'
+                     and e['payload'].get('call_id')=='calc')
+            rows.insert(idx+1,copy.deepcopy(rows[idx]))
+        elif scenario=="wrong_tool_name":
+            for entry in rows:
+                if entry['type']=='tool_result' and entry['payload'].get('call_id')=='calc':
+                    entry['payload']['tool_name']='read_file'
+        elif scenario=="result_before_call":
+            called=next(i for i,e in enumerate(rows) if e['type']=='tool_called'
+                        and e['payload'].get('call_id')=='calc')
+            result=next(i for i,e in enumerate(rows) if e['type']=='tool_result'
+                        and e['payload'].get('call_id')=='calc')
+            rows.insert(called,rows.pop(result))
+        for i,e in enumerate(rows,1):e['sequence']=i
+        path.write_text(''.join(json.dumps(e)+'\n' for e in rows))
+        result=ORACLE.inspect(ROOT,path)
+        assert result['status']=='failed_or_incomplete',scenario
+        assert result['checks']['tool_receipts_correlate_with_calls'] is False,scenario
+
+
+def test_incomplete_later_turn_cannot_inherit_earlier_finished_status(tmp_path):
+    p=event_data(tmp_path)
+    rows=[json.loads(line) for line in p.read_text().splitlines()]
+    rows.append(row(len(rows)+1,'turn_started',{'user_text':'unfinished correction'}))
+    p.write_text(''.join(json.dumps(e)+'\n' for e in rows))
+    result=ORACLE.inspect(ROOT,p)
+    assert result['status']=='failed_or_incomplete'
+    assert result['checks']['last_turn_has_terminal_event'] is False
+
+
+def test_first_pass_answer_needs_actual_source_grounding(tmp_path):
+    original=event_data(tmp_path)
+    rows=[json.loads(line) for line in original.read_text().splitlines()]
+    final=next(e['payload']['message'] for e in rows if e['type']=='message_added'
+               and e['payload']['message']['role']=='assistant')
+    for missing in ('all', 'required test name', 'arithmetic'):
+        if missing=='all':
+            final['content']='Finished the audit. Everything looks fine.'
+        elif missing=='required test name':
+            final['content']='Ten tests total, tests/test_history_replay.py and tests/test_storage_boundaries.py; 7 + 3 = 10.'
+        else:
+            final['content']=(
+                'Ten tests total in tests/test_history_replay.py and tests/test_storage_boundaries.py: '
+                'test_external_history_tampering_is_still_detected_with_file_stat_cache '
+                'and test_session_storage_rejects_symlink_escape.'
+            )
+        original.write_text(''.join(json.dumps(e)+'\n' for e in rows))
+        assert ORACLE.inspect(ROOT,original)['status']=='failed_or_incomplete',missing

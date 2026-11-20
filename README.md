@@ -65,6 +65,8 @@ Run the agent CLI with `python -m swaag --help`. Run the benchmark CLI with `pyt
 
 **November 20, 2026 read-only live agent source-audit and verified recovery:** See docs/evaluation/real-readonly-agent-demonstration-2026-11-20.md, docs/evaluation/real-readonly-agent-observed-metrics-2026-11-20.json and docs/evaluation/nov20-real-agent-demo-sales-handoff.md. A model-controlled developer task used real scoped read_file/list_files/calculator operations and recovered missing-file evidence, but first miscalculated and timed out; a separate corrective turn then succeeded in the same durable session. An independent tool-receipt oracle verified the corrected outcome, not first-pass success. Neither this evaluation nor its source tests establish a production voice agent, enterprise security acceptance or buyer demand.
 
+**November 20 independent evidence integrity check:** The preserved demo journal still verifies, while forged/duplicate/mismatched synthetic receipt journals are now explicitly rejected; see docs/evaluation/read-only-demo-verifier-integrity-2026-11-20.md. This does not prove first-attempt autonomy or production deployment.
+
 ## Validation
 
 Before declaring a deployed runtime current, run the read-only, host-independent package and SQLite preflight:
