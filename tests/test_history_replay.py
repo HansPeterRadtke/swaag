@@ -1,5 +1,27 @@
 
 
+def test_exact_control_status_distinguishes_canceled_processed_and_missing(tmp_path) -> None:
+    from swaag.history import HistoryStore
+
+    history = HistoryStore(tmp_path / "history")
+    state = history.create(config_fingerprint="test", model_base_url="http://model")
+    session = state.session_id
+    pending = history.enqueue_control_message(session, "review this", control_id="voice-pending")
+    assert pending["status"] == "pending"
+    assert history.control_message_status(session, "voice-pending") == "pending"
+    assert history.cancel_pending_control_message(session, "voice-pending") is True
+    assert history.control_message_status(session, "voice-pending") == "canceled"
+    assert history.cancel_pending_control_message(session, "voice-pending") is False
+    assert history.control_message_status(session, "absent") is None
+    history.enqueue_control_message(session, "already consumed", control_id="voice-processed")
+    history.mark_control_message_processed(session, "voice-processed")
+    assert history.control_message_status(session, "voice-processed") == "processed"
+    assert history.cancel_pending_control_message(session, "voice-processed") is False
+    assert history.control_message_status(session, "voice-processed") == "processed"
+    other = history.create(config_fingerprint="test", model_base_url="http://model")
+    assert history.control_message_status(other.session_id, "voice-pending") is None
+
+
 def test_history_replay_accepts_wait_completed(make_config, tmp_path) -> None:
     from swaag.history import HistoryStore
 

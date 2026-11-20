@@ -963,6 +963,19 @@ class HistoryStore:
             _ensure_directory(processed_path.parent)
             os.replace(inbox_path, processed_path)
 
+    def control_message_status(self, session_id: str, control_id: str) -> str | None:
+        """Read the exact durable receipt state, including withdrawn controls.
+
+        Missing or already-processed controls must never be inferred canceled.
+        This query is observation only and cannot change command authority.
+        """
+        with self._sqlite_connect() as connection:
+            row = connection.execute(
+                "SELECT status FROM control_messages WHERE session_id=? AND control_id=?",
+                (session_id, control_id),
+            ).fetchone()
+        return str(row["status"]) if row is not None else None
+
     @exclusive_control_mutation
     def cancel_pending_control_message(self, session_id: str, control_id: str) -> bool:
         """Withdraw an unconsumed receipt atomically with action acceptance.

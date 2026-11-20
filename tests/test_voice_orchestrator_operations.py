@@ -196,7 +196,7 @@ def test_queued_voice_withdrawal_needs_no_execution_slot_and_cannot_poison_next_
             receipt, future = service._start_voice_operation_stream('Execute WITHDRAWN_ACTION.', 'queued_voice')
             assert not future.done()
             result = service.cancel_orchestrator_operation('queued_voice', 'Withdraw before execution')
-            assert result['cancellation_acknowledged'] is True
+            assert result['cancellation_acknowledged'] is True, result
             assert runtime.history.list_pending_control_messages(state.session_id) == []
         with pytest.raises(OperationCanceled):
             future.result(timeout=5)
@@ -204,6 +204,50 @@ def test_queued_voice_withdrawal_needs_no_execution_slot_and_cannot_poison_next_
         assert service.orchestrator_operations.get('queued_voice')['status'] == 'canceled'
         assert service.orchestrator_message('Answer the new request.')['answer'] == 'The new request is answered.'
         assert 'WITHDRAWN_ACTION' not in client.requests[0]['prompt']
+    finally:
+        service.close()
+
+
+def test_queued_voice_cancel_acknowledges_receipt_already_withdrawn_by_worker(make_config, monkeypatch):
+    """An independent worker can beat cancel_pending without executing tools."""
+    from swaag.runtime import AgentRuntime
+    from swaag.session_lock import session_execution_lock
+    from tests.test_agent_action_loop import FakeModelClient, _action
+    client = FakeModelClient([_action(message="This request must not execute.")])
+    runtime = AgentRuntime(make_config(model__context_limit=32000), model_client=client)
+    service = CommunicationService(runtime, orchestrator_runtime=runtime)
+    try:
+        state = service._load_orchestrator_state()
+        actual_cancel = runtime.history.cancel_pending_control_message
+        seen = []
+
+        def concurrent_cancel(session_id, control_id):
+            # Another worker can already have withdrawn the receipt, and can
+            # race this simulated withdrawal immediately after cancel_requested.
+            actual_cancel(session_id, control_id)
+            if threading.current_thread() is threading.main_thread():
+                seen.append(runtime.history.control_message_status(session_id, control_id))
+                return False
+            return False
+
+        with session_execution_lock(runtime.history, state.session_id):
+            receipt, future = service._start_voice_operation_stream(
+                "Execute WITHDRAWN_ACTION.", "already_withdrawn_voice"
+            )
+            assert not future.done()
+            monkeypatch.setattr(runtime.history, "cancel_pending_control_message", concurrent_cancel)
+            try:
+                result = service.cancel_orchestrator_operation(
+                    "already_withdrawn_voice", "Withdraw before execution"
+                )
+            finally:
+                monkeypatch.setattr(runtime.history, "cancel_pending_control_message", actual_cancel)
+            assert result["cancellation_acknowledged"] is True, result
+            assert seen == ["canceled"]
+            assert runtime.history.list_pending_control_messages(state.session_id) == []
+        with pytest.raises(OperationCanceled):
+            future.result(timeout=5)
+        assert not client.requests
     finally:
         service.close()
 

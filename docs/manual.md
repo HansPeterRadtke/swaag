@@ -31,14 +31,25 @@ The packaged endpoint is a development default. Override it in deployment config
 For a **strictly tool-free** foreground or recorded-speech acceptance test, use
 `[tools] enabled = []` together with `staged_discovery = false`,
 `allow_stateful_tools = false`, and `allow_side_effect_tools = false`.
-The configuration loader accepts the empty allowlist, and the registry exposes
-no system capabilities or tool-loader. Leaving staged discovery enabled still
+The configuration loader accepts the empty allowlist, and the canonical
+foreground orchestrator preserves this explicit deny-all request instead of
+substituting communication defaults. The registry exposes no system capabilities
+or tool-loader. Ordinary nonempty configurations retain their existing
+orchestration tools. Leaving staged discovery enabled still
 exposes its explicit `load_tools` capability, so disabling side effects alone
 is not a sufficient tool-free contract. This is a mechanical tool-scope boundary,
 not speaker verification, an authorization grant, or proof that an LLM's reply
 is accurate. Keep test sessions and logs in an isolated private runtime root.
 
 External tools are configured separately. MCP and other external catalogs are schema-discovered and semantically selected, but missing optional Layer 3 systems do not make the core unhealthy. Shell can be a host-dependent fallback when permitted without turning invoked programs into SWAAG dependencies.
+
+Queued voice operations retain an authoritative cancellation receipt. A
+concurrent voice worker may withdraw the same pending control before the
+request-side cancel call finishes; the API may acknowledge cancellation only
+when the durable control row is confirmed canceled. A missing or processed
+control is not a successful no-action cancellation and must not be described
+as reversing already committed effects. This preserves duplicate-operation
+and active-action uncertainty boundaries.
 
 ## Conversation and sessions
 

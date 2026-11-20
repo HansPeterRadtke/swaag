@@ -67,6 +67,8 @@ Run the agent CLI with `python -m swaag --help`. Run the benchmark CLI with `pyt
 
 **November 20 independent evidence integrity check:** The preserved demo journal still verifies, while forged/duplicate/mismatched synthetic receipt journals are now explicitly rejected; see docs/evaluation/read-only-demo-verifier-integrity-2026-11-20.md. This does not prove first-attempt autonomy or production deployment.
 
+**November 20 real voice no-action integration:** See `docs/evaluation/voice-noaction-verified-integration-2026-11-20.md` for checksum-grounded recorded-speech recognition, independent tool-free Qwen responses, exact reconnect playback, spoofed speaker fail-closed behavior, sample ASR errors and the canonical SWAAG authority/latency acceptance boundary. No production voice-to-TTS deployment is claimed.
+
 ## Validation
 
 Before declaring a deployed runtime current, run the read-only, host-independent package and SQLite preflight:

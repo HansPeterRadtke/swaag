@@ -1566,6 +1566,16 @@ class CommunicationService:
         # constructed on every action, massively delaying voice responses.
         orchestrator_config.tools.allow_stateful_tools = True
         orchestrator_config.tools.allow_side_effect_tools = True
+        # A caller may explicitly request an entirely tool-free foreground
+        # session, even when the usual orchestrator has broader capabilities.
+        # Do not silently replace a deny-all allowlist with communication's
+        # defaults or elevate its permissions. Staged discovery must also be
+        # disabled, because it exposes load_tools despite an empty allowlist.
+        if not config.tools.enabled and not config.tools.staged_discovery:
+            orchestrator_config.tools.enabled = []
+            orchestrator_config.tools.staged_discovery = False
+            orchestrator_config.tools.allow_stateful_tools = False
+            orchestrator_config.tools.allow_side_effect_tools = False
         orchestrator = AgentRuntime(orchestrator_config)
         worker_model_runtimes: dict[str, AgentRuntime] = {}
         if getattr(config, "communication", None) and config.communication.enabled:
@@ -2180,7 +2190,14 @@ class CommunicationService:
             elif record["session_id"] and record["status"] in {"accepted", "running"}:
                 withdrawn = self.orchestrator_runtime.history.cancel_pending_control_message(
                     record["session_id"], self._voice_control_id(operation_id))
-                if withdrawn is True:
+                # Another execution thread may have durably withdrawn this
+                # same queued receipt between our cancellation request and
+                # the attempt above. It is safe to acknowledge ONLY when the
+                # authoritative control has status canceled, not when missing
+                # or already processed (where effects may be uncertain).
+                if withdrawn or self.orchestrator_runtime.history.control_message_status(
+                    record["session_id"], self._voice_control_id(operation_id)
+                ) == "canceled":
                     self.orchestrator_operations.finish(operation_id, "canceled")
                     record = self.orchestrator_operations.get(operation_id)
         return {"ok": True, **record,
