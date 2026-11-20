@@ -28,6 +28,16 @@ The packaged endpoint is a development default. Override it in deployment config
 
 `[tools].enabled` controls Layer 2 capability exposure. Disabling a system capability also disables its automatic context contribution; disabled notes or prompt instructions are not silently injected by Layer 1. Filesystem roots, stateful behavior, side effects, and shell privileges remain mechanical policy.
 
+For a **strictly tool-free** foreground or recorded-speech acceptance test, use
+`[tools] enabled = []` together with `staged_discovery = false`,
+`allow_stateful_tools = false`, and `allow_side_effect_tools = false`.
+The configuration loader accepts the empty allowlist, and the registry exposes
+no system capabilities or tool-loader. Leaving staged discovery enabled still
+exposes its explicit `load_tools` capability, so disabling side effects alone
+is not a sufficient tool-free contract. This is a mechanical tool-scope boundary,
+not speaker verification, an authorization grant, or proof that an LLM's reply
+is accurate. Keep test sessions and logs in an isolated private runtime root.
+
 External tools are configured separately. MCP and other external catalogs are schema-discovered and semantically selected, but missing optional Layer 3 systems do not make the core unhealthy. Shell can be a host-dependent fallback when permitted without turning invoked programs into SWAAG dependencies.
 
 ## Conversation and sessions

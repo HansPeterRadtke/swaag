@@ -1099,8 +1099,8 @@ def _coerce_config(
         raise ValueError("external_benchmarks.agent_generation.empty_patch_retry_prompt must not be empty")
     if reader.default_overlap_chars >= reader.default_chunk_chars:
         raise ValueError("reader.default_overlap_chars must be smaller than reader.default_chunk_chars")
-    if not tools.enabled:
-        raise ValueError("tools.enabled must not be empty")
+    # An explicit empty allowlist is a valid tool-free foreground policy.
+    # Keep staged discovery disabled as well to expose no load_tools route.
     _validate_positive("embedding_index.max_results", embedding_index.max_results)
     if embedding_index.enabled and (not embedding_index.base_url or not embedding_index.model):
         raise ValueError("embedding_index.base_url and embedding_index.model are required when embeddings are enabled")

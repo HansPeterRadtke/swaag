@@ -24,6 +24,38 @@ def test_load_config_applies_env_override(tmp_path: Path) -> None:
     assert len(config.config_fingerprint()) == 64
 
 
+def test_explicit_empty_tool_allowlist_loads_without_enabling_a_fallback(tmp_path: Path) -> None:
+    from swaag.tools.registry import ToolRegistry
+
+    path = tmp_path / "no-action.toml"
+    path.write_text(
+        "[tools]\nenabled = []\n"
+        "allow_stateful_tools = false\n"
+        "allow_side_effect_tools = false\n"
+        "staged_discovery = false\n",
+        encoding="utf-8",
+    )
+    config = load_config([path], env={})
+    assert config.tools.enabled == []
+    assert config.tools.allow_side_effect_tools is False
+    assert config.tools.allow_stateful_tools is False
+    assert config.tools.staged_discovery is False
+    registry = ToolRegistry()
+    assert registry.enabled_tools(config) == []
+    assert registry.prompt_tuples(config) == []
+
+
+def test_empty_tool_allowlist_keeps_enabled_discovery_explicit(tmp_path: Path) -> None:
+    from swaag.tools.registry import ToolRegistry
+
+    path = tmp_path / "no-action.toml"
+    path.write_text("[tools]\nenabled = []\nstaged_discovery = true\n", encoding="utf-8")
+    config = load_config([path], env={})
+    tools = ToolRegistry().enabled_tools(config)
+    assert [tool.name for tool in tools] == ["load_tools"]
+    # Tool-free execution must disable staged discovery as well.
+
+
 def test_invalid_reader_overlap_is_rejected(tmp_path: Path) -> None:
     env = {
         "SWAAG__SESSIONS__ROOT": str(tmp_path / "sessions"),
