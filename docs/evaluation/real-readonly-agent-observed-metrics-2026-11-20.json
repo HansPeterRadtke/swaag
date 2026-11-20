@@ -1,0 +1,82 @@
+{
+  "schema": "swaag_public_readonly_demo_metrics_v1",
+  "date": "2026-11-20",
+  "scope": "actual SWAAG developer-session real resident model + permitted read-only tools",
+  "verdict": "verified_after_supervisor_correction",
+  "first_attempt_autonomous_success": false,
+  "manual_separate_corrective_turn_required": true,
+  "real_agent_execution": true,
+  "model_backend": "resident Qwen3.8-27B Q8 (private local Thor)",
+  "tool_config": [
+    "read_file",
+    "list_files",
+    "calculator"
+  ],
+  "tool_side_effects_enabled": false,
+  "real_tool_call_count": 6,
+  "successful_tool_results": 5,
+  "tool_error_count": 1,
+  "controlled_missing_path_recovered": true,
+  "read_file_results_exact_source_verified": 2,
+  "source_tests": [
+    {
+      "path": "tests/test_history_replay.py",
+      "top_level_tests": 7,
+      "verified_function": "test_external_history_tampering_is_still_detected_with_file_stat_cache"
+    },
+    {
+      "path": "tests/test_storage_boundaries.py",
+      "top_level_tests": 3,
+      "verified_function": "test_session_storage_rejects_symlink_escape"
+    }
+  ],
+  "expected_total_test_functions": 10,
+  "calculator_receipts": [
+    {
+      "expression": "0 + 0",
+      "result": 0
+    },
+    {
+      "expression": "7 + 3",
+      "result": 10
+    }
+  ],
+  "model_requests": 4,
+  "model_completions": 3,
+  "model_timeout_failures": 1,
+  "model_call_elapsed_seconds": [
+    142.473,
+    139.499,
+    222.792
+  ],
+  "initial_run": {
+    "duration_seconds": 318.51,
+    "exit_code": 1,
+    "result": "failed"
+  },
+  "separate_correction_run": {
+    "duration_seconds": 391.82,
+    "exit_code": 0,
+    "result": "verified_completed"
+  },
+  "combined_wall_seconds": 710.33,
+  "independently_reconstructed_durable_event_count": 341,
+  "durable_replay_in_new_process": true,
+  "source_grammar_bug_reproduced_and_isolated_fix_reused": true,
+  "python311_sqlite3513_focused_security_tests_passed": 128,
+  "preemption_cancellation_unit_tests_passed": 40,
+  "actual_live_model_cancellation_tested": false,
+  "production_deployed": false,
+  "actual_voice_agent_tested_in_this_demo": false,
+  "actual_customer_or_sale": false,
+  "full_repository_suite_claimed_green": false,
+  "limitations": [
+    "first model-guided attempt gave wrong arithmetic and then timed out",
+    "manual separate corrective turn required for verified completion",
+    "high model latency, not production throughput percentiles",
+    "read-only developer session, not normal voice/orchestrator interaction",
+    "security/cancellation results are focused deterministic tests, not formal certification"
+  ],
+  "detailed_source": "docs/evaluation/real-readonly-agent-demonstration-2026-11-20.md",
+  "sales_handoff": "docs/evaluation/nov20-real-agent-demo-sales-handoff.md"
+}

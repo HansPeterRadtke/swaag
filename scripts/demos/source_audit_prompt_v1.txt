@@ -1,0 +1,7 @@
+You are performing a non-destructive, source-backed security and replay audit using SWAAG's actual configured tools. This is an explicit developer test session, not an ordinary user voice turn.
+
+The supplied outdated path is tests/test_history_integrity.py. FIRST attempt to read that exact named file with read_file. If the file is absent, record the actual tool error; do not invent its contents. Recover by using list_files on the tests directory, and locate the existing history-replay test file. Read the real tests/test_history_replay.py. In a SEPARATE read_file call, read the real tests/test_storage_boundaries.py.
+
+Based strictly on the text read from these two real files, report the exact test function that detects external tampering of append-only history, and the exact test function that rejects symlink escape from session storage. Count top-level test functions in each file, and use the calculator tool to calculate their combined count rather than mental arithmetic. State both component counts and the total. Do not use any unconfigured tool, invoke shell commands, write files, submit real system actions or make network calls. Do not claim successful reads unless the actual tool results verify them. If any required read or calculation fails, explicitly report incomplete audit and which evidence is missing.
+
+Respond briefly with an evidence-based description and the exact function names, plus separate status for missing-path recovery and source verification. No system changes were requested or authorized.

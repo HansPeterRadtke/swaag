@@ -63,6 +63,8 @@ python3 -m venv .venv
 
 Run the agent CLI with `python -m swaag --help`. Run the benchmark CLI with `python -m swaag.benchmark --help`.
 
+**November 20, 2026 read-only live agent source-audit and verified recovery:** See docs/evaluation/real-readonly-agent-demonstration-2026-11-20.md, docs/evaluation/real-readonly-agent-observed-metrics-2026-11-20.json and docs/evaluation/nov20-real-agent-demo-sales-handoff.md. A model-controlled developer task used real scoped read_file/list_files/calculator operations and recovered missing-file evidence, but first miscalculated and timed out; a separate corrective turn then succeeded in the same durable session. An independent tool-receipt oracle verified the corrected outcome, not first-pass success. Neither this evaluation nor its source tests establish a production voice agent, enterprise security acceptance or buyer demand.
+
 ## Validation
 
 Before declaring a deployed runtime current, run the read-only, host-independent package and SQLite preflight:
