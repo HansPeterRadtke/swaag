@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Independently grade actual SWAAG tool receipts against on-disk source.
+"""Independently grade actual SWAAG tool receipts against pinned original Git blobs.
 
 A plausible model answer is never proof of tool execution or completion.
 No model invocation or filesystem mutation outside --output.
@@ -12,6 +12,15 @@ import hashlib
 import json
 import re
 from pathlib import Path
+import subprocess
+
+# Actual original run manifest used this commit. Later legitimate tests added
+# to the current checkout must NEVER rewrite historical evidence or counts.
+BASELINE_REVISION = "0f663eace62d6148f42aa33bdcc02c436e5d95c6"
+BASELINE_SOURCE_SHA256 = {
+    "tests/test_history_replay.py": "8cfce6fba107935ccce0b09709a9ba439fec7f6f9f798c0f5517e602c4922ee7",
+    "tests/test_storage_boundaries.py": "b40f2c416a33dc00c9ef818a74ad9d770399f1e7d5299c58562cfbcdb4966b53",
+}
 
 FILES = {
   'tests/test_history_replay.py':
@@ -22,14 +31,36 @@ FILES = {
 BAD_PATH='tests/test_history_integrity.py'
 
 
+def pinned_source(repo: Path, rel: str) -> str:
+    """Read the exact Git blob used for the real demonstration, not HEAD.
+
+    git cat-file only reads local Git objects; it neither checks out files nor
+    runs a model, network request, test hook, or semantic source repair. A
+    shallow clone missing the historical commit must fail closed.
+    """
+    if rel not in BASELINE_SOURCE_SHA256:
+        raise ValueError('Unrecognized historical source: '+rel)
+    try:
+        result=subprocess.run(
+            ['git','-C',str(repo),'cat-file','blob',BASELINE_REVISION+':'+rel],
+            capture_output=True,check=True,timeout=10)
+    except (subprocess.CalledProcessError,subprocess.TimeoutExpired,FileNotFoundError) as exc:
+        raise ValueError('Historical source revision unavailable: '+rel) from exc
+    raw=result.stdout
+    if hashlib.sha256(raw).hexdigest()!=BASELINE_SOURCE_SHA256[rel]:
+        raise ValueError('Original demonstrator source hash mismatch: '+rel)
+    return raw.decode('utf8')
+
+
 def inspect(repo: Path, journal: Path) -> dict:
     rows=[json.loads(line) for line in journal.read_text().splitlines() if line.strip()]
     if not rows or any(a['sequence']>=b['sequence'] for a,b in zip(rows,rows[1:])):
         raise ValueError('Durable journal is missing or out of order')
     types=Counter(x['type'] for x in rows)
     oracle={}
+    original_sources={rel:pinned_source(repo,rel) for rel in FILES}
     for rel,expected_name in FILES.items():
-        data=(repo/rel).read_text(encoding='utf8')
+        data=original_sources[rel]
         tests=[n.name for n in ast.parse(data).body
                if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef))
                and n.name.startswith('test_')]
@@ -92,7 +123,7 @@ def inspect(repo: Path, journal: Path) -> dict:
                 if name=='read_file':
                     rel=(p.get('validated_input') or {}).get('path')
                     if rel in FILES:
-                        expected=(repo/rel).read_text(encoding='utf8')
+                        expected=original_sources[rel]
                         item['exact_source_match']=(out.get('text')==expected)
                         item['source_sha256']=hashlib.sha256(expected.encode()).hexdigest()
                 if name=='list_files':
@@ -185,7 +216,7 @@ def inspect(repo: Path, journal: Path) -> dict:
        'completed_model_call_timings':model_timing,
        'model_queue_wait_seconds':model_queue_waits,
        'checks':checks,'receipt_integrity_errors':receipt_integrity_errors,
-       'source_oracle':oracle,'calls':calls,
+       'source_oracle':oracle,'source_revision':BASELINE_REVISION,'calls':calls,
        'successful_tool_results':successes,'tool_errors':failures,
        'tool_durations':durations,'model_request_count':types['model_request_sent'],
        'model_response_count':types['model_response_received'],

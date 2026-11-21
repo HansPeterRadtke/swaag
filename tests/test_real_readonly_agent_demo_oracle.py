@@ -46,7 +46,7 @@ def event_data(tmp_path,*,wrong_calc=False,spoofed_only=False,wrong_read=False,c
             'validated_input':{'path':'tests'},'output':{
               'path':'tests','entries':list(ORACLE.FILES),'count':2}})
         for i,rel in enumerate(ORACLE.FILES,1):
-            content=(ROOT/rel).read_text()
+            content=ORACLE.pinned_source(ROOT,rel)
             cid='source-'+str(i)
             add('tool_called',{'call_id':cid,'tool_name':'read_file',
                 'tool_input':{'path':rel}})
@@ -186,3 +186,22 @@ def test_first_pass_answer_needs_actual_source_grounding(tmp_path):
             )
         original.write_text(''.join(json.dumps(e)+'\n' for e in rows))
         assert ORACLE.inspect(ROOT,original)['status']=='failed_or_incomplete',missing
+
+
+def test_historical_evaluation_is_pinned_to_live_source_revision():
+    """A new test in current HEAD must not invalidate the Nov 20 journal."""
+    import ast
+    from hashlib import sha256
+    for rel,digest in ORACLE.BASELINE_SOURCE_SHA256.items():
+        original=ORACLE.pinned_source(ROOT,rel)
+        assert sha256(original.encode()).hexdigest()==digest
+    tests=[n for n in ast.parse(ORACLE.pinned_source(ROOT,'tests/test_history_replay.py')).body
+           if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name.startswith('test_')]
+    assert len(tests)==7
+    assert ORACLE.BASELINE_REVISION=='0f663eace62d6148f42aa33bdcc02c436e5d95c6'
+
+
+def test_repointing_history_to_a_new_revision_must_fail_closed(monkeypatch):
+    monkeypatch.setattr(ORACLE,'BASELINE_REVISION','HEAD')
+    with pytest.raises(ValueError,match='source hash mismatch'):
+        ORACLE.pinned_source(ROOT,'tests/test_history_replay.py')

@@ -624,3 +624,26 @@ The quick foreground now optionally supplies a few exact, indexed older user-mes
 ## October 21: shared host filesystem headroom
 
 The canonical background state refresh now captures read-only `statvfs` measurements for the filesystem holding SWAAG sessions, including nonprivileged available GiB and observed percentage used. Fresh samples flow into the fast user-facing context as well as the full orchestrator, so disk-status questions can be answered from state rather than triggering a tool search. The values are **shared filesystem observations**, not SWAAG-only quotas or promises that future writes will succeed. No storage is removed by the collection. See `docs/host-storage-headroom-2026-10-21.md`.
+
+## Staged live Phonon reply and reconnect validation (November 21, 2026)
+
+For a source-pinned test of one **previously verified canonical no-tool SWAAG
+reply** through the installed Jetson-to-Nitro Phonon Easton TTS loopback, an
+**original** recorded speech review draft, and exact four-WebSocket media
+recovery/normal acknowledgment, see
+`docs/evaluation/real-phonon-voice-staged-reconnect-2026-11-21.md`. The owning
+project script is `scripts/demos/verify_real_voice_phonon_reconnect.py`. It
+requires the exact pinned Jetson voice test source, private source proof and
+explicit environment/CLI run opt-in. No side effects or physical device use
+are permitted by this acceptance. It does **not** establish a continuous new
+orchestrator response, live `VoiceSession.answer` TTS streaming, authorized
+speaker identity, production deployment or denied lost-playback-ACK behavior.
+
+The follow-on script `scripts/demos/verify_real_voice_phonon_streaming_reconnect.py`
+executes a **separate, genuine streamed Phonon TTS** check with the actual
+Jetson `VoiceSession.answer` path, one real Whisper source, controlled socket
+disconnection, exact saved-PCM replay and normal ACK. It still uses a pinned
+**prior** tool-free canonical reply at an intercepted test-only orchestrator
+boundary; it does not establish authorization for a new real agent command or
+a physical phone release. Consult the matching evaluation report and both
+explicit opt-in guards before a fresh run.

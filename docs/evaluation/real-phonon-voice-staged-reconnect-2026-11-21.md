@@ -1,0 +1,96 @@
+# Verified existing SWAAG answer -> Phonon TTS -> original recorded speech / four-socket reconnect
+
+**Date:** November 21, 2026. **Status:** genuine, checksum-grounded and independently rerun *staged* no-action voice integration, **not** a continuous production assistant turn, human speaker verification, or a physical Android release.
+
+## Fixed evidence, source and effect boundaries
+
+An actual prior canonical SWAAG foreground turn was verified independently on Nitro, using a deliberately empty tool registry, no stateful/side-effect permissions, and a durable completed answer. That source event journal has SHA-256 `1e7fd9076c7c0364d32494dbbfdd95d280ac9071e11daf5c59e268e99b28aaa4`; the answer text has SHA-256 `78c4dd833853f3b881806d7ec76dd572ffa153bcd09bdc72fe7334da7731dbab`. An exact private source-proof manifest, derived from that real journal, is supplied to the acceptance script. The script checks both exact hashes and the no-tools/completed/not-a-fresh-turn flags. The previous SWAAG model call is **not re-run** by this experiment. No SWAAG user/worker operation is authorized by that old answer.
+
+The unchanged original **real** public-domain source recording on Jetson has SHA-256 `2b29bead44440ee10117f8dc6f2f20be552aa2ffbb39b36f10c854dc165376ee`. The already tested Jetson/devtests `voice_agent_live_runtime` implementation and no-action WebSocket acceptance are pinned to worktree commit `b868ed1a4e9f07ca696d03c54e9bb934bf2a8750`; the script verifies the exact source SHA-256 of its voice server and two relevant test modules **before** running. The matching sources must exist locally on Jetson and must not be modified by this acceptance. These dependencies are not silently replaced with unverified current master or the older production voice service.
+
+The script calls only `http://127.0.0.1:15305/synthesize` on Jetson, which is the already-running authenticated private SSH forward to Nitro's warm CPU Phonon 31M Easton voice, not a network-public TTS listener. It rejects every other destination, checks the HTTP media type and exact bounded sixteen-kilohertz mono PCM16 WAV properties, and refuses empty or truncated results. The script does not turn on microphones, connect to a physical phone, restart a service, call an external provider, or interact with any live SWAAG agent tool. The new generated WAV and logs remain private with restricted file permissions.
+
+## Reproduced actual test
+
+The independently reviewed prior canonical SWAAG answer was converted to a five-point-three-six-second WAV, with actual real Phonon synthesis request duration of **two-point-five-nine seconds** in the first local run. The original on-disk complete-PCM format is mono, sixteen kilohertz, sixteen-bit PCM. The WAV checksum was `59ae90f298e95f42662bf75e4bef0640e7ea91261dddd29ecf358eff4115352a`.
+
+That **genuinely synthesized** WAV was supplied to the existing isolated Jetson test's intercepted **non-action** assistant response. The user input remained the actual original WAV, processed by resident Thor Whisper, yielding one manually reviewable draft, not an automatic command. Explicit test-only local confirmation was followed by four genuine authenticated localhost WebSocket generations. Audio partially delivered to the disconnected second socket, then the full exact generated PCM was recovered on the third. The normal playback completion acknowledgment was persisted, and the fourth socket correctly did not replay the response. The first manual test finished in **nine-point-zero-four seconds**. It included exactly one real Whisper call, the same original user WAV checksum, exact generated reply WAV checksum, one durable reviewed turn, and zero real SWAAG action/TTS calls *inside the voice fixture*. This last metric does **not** deny the one genuine Phonon synthesis performed **before** the fixture.
+
+The new owning SWAAG script `scripts/demos/verify_real_voice_phonon_reconnect.py` reproduces the same staged experiment with explicit source/endpoint/provenance checks and private outputs, and includes `tests/test_real_voice_phonon_reconnect.py` with **twenty-seven passing** no-action source-validation, missing-authority, malformed-WAV, endpoint-denial, HTTP-redirect rejection, wrong installed-engine identity and opt-in regressions. The script disables HTTP proxies and redirects, accepts only the existing Jetson loopback port, checks the installed warm service identity and uses mode-six-hundred private outputs. Its first pinned-source live rerun finished successfully in **thirteen wall seconds**, including **two-point-nine-nine seconds** of actual Phonon synthesis and four valid WebSocket generations, with exact replay and a normal ACK. The improved guarded-source live rerun passed in **ten wall seconds**, including **one-point-nine-eight seconds** of actual synthesis and four generations, with exact replay, durable ACK and private result mode 0600. The last generated WAV had a different checksum from the first: independent TTS generations need **not** produce identical PCM, but every replay must exactly match the WAV generated during **that** run. The initial shell invocation failed *before any execution* because `/usr/bin/time` was absent on Jetson; rerunning the exact new test via `timeout` with Bash timing succeeded. This was a launch dependency error, **not** a SWAAG/TTS failure.
+
+## Reproduction and acceptance guards
+
+After checking the project exchange and Raspi resource broker, first prepare one **new**, unused private evidence folder parent with mode 0700, and provide the private Nitro-derived proof JSON. From a clean, pinned SWAAG repository source checkout on Jetson, execute the script **without** `--run` first, supplying `--reply-proof` (the private proof), `--voice-source` (the exact Jetson `voice_agent_live_runtime` directory), and `--evidence` (a previously unused output subdirectory). This checks all source hashes and replies `source_preflight_only`, with **no model call, no output directory, no TTS and no voice activity**. A real run additionally requires **both** `--run` and environment variable `SWAAG_PHONON_VOICE_NOACTION=1`. If any source changes or any claim cannot be verified, it fails closed. Failure evidence is retained in the private output directory; never treat a plausible model text or existing fixture file as a successful live reproduction.
+
+The stable private first-run WAV and logs are on Jetson under `/data/var/swaag-benchmarks/real-canonical-reply-phonon-playback-20261121/`. The independently rerun initial script evidence is the **new subfolder** `second-live-run-20261121`, containing its own generated WAV, `voice-test.log` and `result.json`, with top-level private `verified-source-proof.json` and `pinned-version-real-run-console.log`. The separately rerun guarded script uses `third-live-run-20261121`, top-level `versioned-acceptance-script-guarded.py` and `guarded-live-console.log`; compare the exact source script hash to the eventual published canonical SWAAG revision. The script is only versioned after committing/pushing and independently verifying the remote source: local test artifacts do not constitute publication. Original SWAAG session/source proof remains on Nitro in the existing restricted `canonical-voice-noaction` benchmark folder. These outputs are *not* published to source control or the Multiverse website. Reproducer must check actual source revisions and the service health again at execution; the previous observation is not a guarantee of future availability.
+
+## What is still not proven
+
+This staged integration does **not** use a fresh canonical SWAAG orchestrator response generated and routed directly from the same WebSocket turn. The real user-recorded audio becomes one **manually reviewed test-only** draft, while the genuine canonical reply was obtained **from a distinct earlier, independently verified no-tools turn**. The **first** localhost voice fixture intercepts the assistant action, uses the previously generated TTS WAV and replays it through real WebSockets. The **second** test below exercises `VoiceSession.answer` and real live `stream_tts_reply` using the previously verified no-tools canonical reply through a test-only intercepted external request. Neither proves **fresh same-turn** live SWAAG-orchestrator-to-Phonon streaming, on-the-fly cancellation during TTS, owner speaker authentication, semantic turn completion, actual phone microphone/playback, physically lost ACK recovery, percentile latency, or release readiness. No denied lost-ACK test was rerun, and no production services were changed. A next justified acceptance increment would bind a *fresh* isolated verified canonical response to the **same explicitly reviewed** WebSocket turn and stream newly synthesized audio without giving it command authority.
+
+## Historical source-verifier compatibility fixed during this change
+
+The new SWAAG unit run also revealed that the older *agent source-audit*
+verifier had counted a **newly added** current test instead of the exact
+historical test source. That was unrelated to the real Phonon/reconnect
+behavior and did not invalidate the original stored event journal. The
+evaluator now reads the original SHA-256-verified Git blobs, never the
+working tree, and the unmodified actual journal passed its twelve grounded
+checks again. The separate regression suite confirms rejection of the wrong
+source revision; see `real-readonly-agent-demonstration-2026-11-20.md`.
+
+## New actual streaming TTS / resumed playback acceptance
+
+A second, distinct, source-pinned owner-project script,
+`scripts/demos/verify_real_voice_phonon_streaming_reconnect.py`, runs the
+**actual Jetson `VoiceSession.answer()` and `stream_tts_reply()` methods** on
+an authenticated, isolated localhost WebSocket. The original recorded audio
+passes through real resident Thor Whisper and remains an editable **manual
+review** draft. After explicit **test-only** manual confirmation, the script
+intercepts only the *external* `receive_voice_run` call and supplies the
+previously verified, exact canonical no-tools reply. It makes **no new SWAAG
+model/worker/tool request**; the local answer stub merely permits the real
+production-path **Phonon service-streaming code** to run against the already
+running Nitro CPU Easton voice through Jetson's existing loopback tunnel.
+
+The first exploratory actual test succeeded: after streaming the initial
+**one thousand nine hundred twenty bytes**, the second WebSocket was closed.
+`VoiceSession.answer` finished the real streaming synthesis and persisted
+**one hundred seventy-one thousand five hundred twenty PCM bytes** in its
+private WAV. The third connection resumed **exactly those** generated bytes,
+recorded a normal playback-completed ACK and persisted completion. A fourth
+connection did not replay. The full test ran about **twelve-point-five seconds**,
+including a measured **four-point-six seconds** of live TTS streaming.
+
+The new **versioned** script was copied byte-for-byte from its SWAAG source
+into private Jetson test storage and independently executed after a source
+preflight that performed **no real model call**. A companion stage-script
+source file is required for immutable source-manifest checks; both are located
+in the same `scripts/demos` directory in an actual SWAAG checkout. The
+versioned script's real-run evidence is under the private Jetson
+`fourth-streamed-versioned-20261121` folder. That separate run also **passed**:
+actual resident Whisper once, actual Phonon stream around **one-point-eight
+seconds**, one thousand nine hundred twenty bytes sent before disconnection,
+one hundred seventy-one thousand five hundred twenty bytes retained, exact
+recovery, normal ACK, no fourth-generation replay and **zero SWAAG actions**.
+Its full test took about **ten-point-three seconds**. The two newly synthesized
+WAV hashes differ; PCM equality is asserted **within each resumed stream**,
+not between independent model generations.
+
+For a source-only preflight, invoke the streaming script on Jetson with
+`--reply-proof` pointing to the restricted source-proof JSON, `--voice-source`
+pointing to the pinned `voice_agent_live_runtime` directory, and `--evidence`
+pointing to an unused output subfolder, **without** `--run`. Actual TTS and ASR
+execution needs **both** `--run` and
+`SWAAG_STREAMED_PHONON_NOACTION=1` after a fresh resource-broker/service check.
+Use only the pinned source checkout, not the dirty devtests master or the
+separately installed older production WebSocket source. As with the staged
+script, do not retry a non-idempotent external action or physical lost-ACK
+scenario. The private source/proof and real WAVs remain **outside Git**.
+
+This closes the previously untested isolated **live TTS streaming and
+reconnect** subpath. It still does **not** prove that a **fresh** canonical
+SWAAG reply is generated from the **same** reviewed turn, that the server
+identifies the true owner, or that the released Android app plays the full
+answer on a physical phone. The original owner speaker/semantic-turn and
+production deployment gates remain open.

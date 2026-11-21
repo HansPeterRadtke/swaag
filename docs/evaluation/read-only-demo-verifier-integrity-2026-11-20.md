@@ -25,3 +25,19 @@ The dominant measured delay is **model preparation / first-token latency and slo
 Read the current source `tests/test_real_readonly_agent_demo_oracle.py` and run its focused pytest suite in the previously documented compatible Python 3.11 and SQLite 3.51.3 process. Preserve the prior private journals; do not rerun the live model just to reproduce this grader regression. Re-evaluate the existing private real session journal with the versioned oracle and check it still reports `verified_after_supervisor_correction`. Verify each deliberately corrupted synthetic journal is rejected. For the exact source revision, model inputs, controlled failure and originally measured end-to-end times, see `real-readonly-agent-demonstration-2026-11-20.md`.
 
 This verifier repair does not alter SWAAG agent tool permissions or the runtime protocol. The outstanding production gates are unchanged: live-model responsiveness, real voice/orchestrator integration, reliable speaker and final-turn authority, and a separately authorized Android release/physical-device acceptance.
+
+## November 21 immutable-source correction
+
+This independent oracle must interpret a historical event journal against
+**the original version of the files it actually read**. On November 21 a
+legitimate new test in the live repository increased `test_history_replay.py`
+from seven to eight top-level tests. The previous oracle incorrectly counted
+HEAD, causing two once-passing fixture tests and the historical claim to fail.
+The oracle now requires source revision
+`0f663eace62d6148f42aa33bdcc02c436e5d95c6`, verifying the exact
+original file hashes from the preserved model run. It does not hide real
+model faults: the result remains **verified only after a separate supervisory
+correction**, not autonomous first-pass completion. If the Git object is
+absent or has a different SHA-256, the evaluator rejects the check. This
+repair was independently rerun against the retained original live event
+journal and returned all twelve source/tool checks true.

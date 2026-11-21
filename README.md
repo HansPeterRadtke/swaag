@@ -69,6 +69,10 @@ Run the agent CLI with `python -m swaag --help`. Run the benchmark CLI with `pyt
 
 **November 20 real voice no-action integration:** See `docs/evaluation/voice-noaction-verified-integration-2026-11-20.md` for checksum-grounded recorded-speech recognition, independent tool-free Qwen responses, exact reconnect playback, spoofed speaker fail-closed behavior, sample ASR errors and the canonical SWAAG authority/latency acceptance boundary. No production voice-to-TTS deployment is claimed.
 
+**November 21 source-pinned streamed Phonon acceptance:** `scripts/demos/verify_real_voice_phonon_streaming_reconnect.py` adds an independent real Jetson Whisper, prior canonical no-tools reply, actual live `VoiceSession.answer`/Phonon streaming and four-WebSocket recovery test. It is local, opt-in and still not a fresh complete physical-device release.
+
+**November 21 real Phonon voice-reply/reconnect acceptance:** `docs/evaluation/real-phonon-voice-staged-reconnect-2026-11-21.md` describes the repeatable source-pinned local no-action script, actual speech synthesis, original input ASR, four-socket replay and accurate production limitations. Run `scripts/demos/verify_real_voice_phonon_reconnect.py` only with explicit live opt-in and after checking broker/model dependencies.
+
 ## Validation
 
 Before declaring a deployed runtime current, run the read-only, host-independent package and SQLite preflight:

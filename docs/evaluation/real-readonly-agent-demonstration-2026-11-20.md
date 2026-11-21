@@ -104,6 +104,28 @@ and one completed terminal turn. A new process independently replayed
 this final 341-event history and confirmed the original failure and
 correction remained present.
 
+## Historical source revision pin — regression repaired November 21
+
+The original live tool result referred to the two exact test source files at
+source revision `0f663eace62d6148f42aa33bdcc02c436e5d95c6`, as
+independently recorded in the private original source manifest. A legitimate
+later `test_history_replay.py` test addition increased the *current* test count
+by one, causing the former evaluator (which incorrectly used current HEAD) to
+reject the original historical ten-test result. This was a **verifier design
+error**, not a failure of the original actual model/tool receipts. The
+versioned evaluator now reads the exact Git blobs from that original revision
+using local `git cat-file blob COMMIT:PATH`, verifies both fixed source
+SHA-256s before counting/reading, and fails closed if the history is absent or
+its source hash differs. It does not check out, modify or revert the current
+source. The corrected evaluator independently rechecked the same real private
+live journal against the exact original bytes and returned
+`verified_after_supervisor_correction`, all twelve checks passing, ten
+historical test functions and six actual tool calls. New focused unit cases
+reject a substituted HEAD revision. **A shallow clone without historical Git
+objects must fetch the exact legitimate original source revision** before
+using this evaluator; it may not invent missing source files or use current
+working tree contents as a fallback.
+
 ## Independent accept/reject oracle
 
 The actual private event journal was examined with the versioned
