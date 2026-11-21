@@ -71,6 +71,8 @@ Run the agent CLI with `python -m swaag --help`. Run the benchmark CLI with `pyt
 
 **November 21 one-use source-pinned voice acceptance:** `scripts/demos/claim_fresh_voice_noaction_session.py` admits a fresh zero-tool private session exactly once after Git/config/tool-scope checks, rejecting replay, reused session roots and concurrent attempts. See the November twenty-one voice evaluation report.
 
+**November 21 faster no-tool voice acceptance:** `scripts/demos/verify_real_voice_fast_foreground_reconnect.py` tests a fresh one-call SWAAG fast reply from real recorded Whisper speech, then actual Phonon streaming and four-WebSocket reconnect with independent Nitro/Jetson evidence. A strict fallback prevents unapproved tool execution; see the November twenty-one evaluation report.
+
 **November 21 fresh same-turn voice acceptance:** `scripts/demos/verify_real_voice_fresh_canonical_phonon.py` preserves one genuine reviewed speech → current no-tool SWAAG question → live Phonon streaming → four-socket reconnect with an explicit quality gate. Source/evidence and production limitations are in `docs/evaluation/real-phonon-voice-staged-reconnect-2026-11-21.md`.
 
 **November 21 source-pinned streamed Phonon acceptance:** `scripts/demos/verify_real_voice_phonon_streaming_reconnect.py` adds an independent real Jetson Whisper, prior canonical no-tools reply, actual live `VoiceSession.answer`/Phonon streaming and four-WebSocket recovery test. It is local, opt-in and still not a fresh complete physical-device release.

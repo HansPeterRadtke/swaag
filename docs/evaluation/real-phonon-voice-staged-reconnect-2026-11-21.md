@@ -251,3 +251,66 @@ ACK and no final replay from a **new** unused private run. Preserve private
 logs and do not reuse any previous source session. No new resident service,
 Android release or owner identity/authorization is introduced by this
 experiment.
+
+### First verified fast-foreground real recorded speech and reconnect (November 21)
+
+**The real fast version passed**, beyond the source-only admission above. The
+exact original public-domain recording (SHA-256
+`2b29bead44440ee10117f8dc6f2f20be552aa2ffbb39b36f10c854dc165376ee`)
+was actually recognized by resident Whisper and held as a **manual test-only
+reviewed draft**. The **exact same ASR bytes** (SHA-256
+`78d06ad3eb01b5470b3742a96b0d5d089f3ad0b73988078200020d6dd33297e2`)
+were passed over authenticated private SSH **stdin**, not shell-interpolated,
+into a previously unused, single-use-claimed Nitro SWAAG session on published
+revision `f1c78f491d325c5f85bc9f333e5a0f459e98b283`. Source and config
+SHA, zero enabled tools and empty prior history were checked before the call.
+The real Qwen3.8 twenty-seven-billion Q8 model chose one **direct answer**:
+“I received your message. What would you like to know about that quote?”
+No deep fallback was invoked. The durable Nitro journal independently confirms
+one model request and response, one finished turn, **zero tool calls, zero
+workers**, prompt **six hundred ninety-three tokens**, first token around
+**one-point-zero seconds**, model elapsed **five-point-two seconds**, and
+fast-stage wall time **eight-point-seven seconds**. The Jetson-to-Nitro
+call took about **nine-point-nine seconds**.
+
+The accepted question went through the real installed **Phonon Easton**
+streaming service in about **one-point-eight seconds** and the original
+Jetson WebSocket media path. After exactly **one thousand nine hundred twenty
+PCM bytes** were delivered the socket was disconnected. The complete **one
+hundred seventeen thousand seven hundred sixty PCM bytes** were recovered
+byte-for-byte on the third connection, with a durable **normal** playback
+acknowledgment and no replay on the fourth. The whole isolated test
+completed in **seventeen-point-six seconds**, exit zero. It never invoked
+SWAAG user tools, edited live session state, restarted speech/model services,
+or touched a real Android microphone or speaker. The earlier full-orchestrator
+acceptance took about eighty-one seconds in another complete run, but the
+model prompts and response lengths differ; **the observed time difference is
+not a guaranteed speedup**.
+
+Cross-host source-backed evidence is private: Nitro
+`/data/var/swaag-benchmarks/fast-foreground-voice-e2e-20261121/independent_fast_model_live_verification.json`
+with original append-only source journal SHA-256
+`7b2b7f2de9fb6ecc9133620c0815f6822234989e67d32807a3cdbf5c79659213`,
+and Jetson
+`/data/var/swaag-benchmarks/fast-voice-e2e-20261121/independent_fast_voice_endtoend_evidence.json`.
+The independent model and Jetson reply SHA-256 match exactly:
+`9e08cff60ac1b53e673fafbbf2121ffa9bc8b246dd821608bf7010186e305f08`.
+The test's source code and follow-up speech rules are published on the
+**canonical SWAAG main branch**; live services remain unchanged.
+
+A follow-on optional source-level improvement adds
+`fast_voice_audio_evidence.py`: it saves the **actual newly generated
+Phonon WAV** in the run's own private directory before the ephemeral
+VoiceCore test fixture can clean it. The helper checks bounded, non-silent
+sixteen-kilohertz mono PCM16, writes mode-0600, refuses overwrite, fsyncs
+and verifies a byte-exact SHA-256 copy. Unit tests check the copy, replay
+refusal and invalid WAV conditions. **This WAV retention is not part of the
+first completed real run above**; a separate source-pinned new session is
+required to verify it with actual audio and independent ASR back-transcription.
+
+The user speaker and automatic turn boundary still need real production
+validation. The earlier original audio had a meaning-changing recognition
+error and required manual review. A standalone quoted statement is not an
+automatically authorized command. Responses from one resident model under
+shared GPU contention have variable latency; production phone experience
+and percentile response times remain unverified.

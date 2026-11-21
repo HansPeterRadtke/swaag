@@ -17,6 +17,7 @@ from websockets.legacy.client import connect
 from websockets.legacy.server import serve
 from verify_real_voice_phonon_reconnect import (check_voice_source, load_verified_source,
     validate_short_voice_clarification, validate_pinned_swaag_paths)
+from fast_voice_audio_evidence import preserve_new_generated_audio
 
 os.environ['SWAAG_REAL_ASR_NOACTION']='1'
 os.environ['SWAAG_FULL_VOICE_NOACTION']='1'
@@ -178,6 +179,8 @@ class StreamedPhononNoAction(unittest.TestCase):
                     saved=Path(record['assistant_audio_path']);self.assertTrue(saved.is_file())
                     full_pcm=server.core().wav_pcm(str(saved))
                     self.assertGreater(len(full_pcm),partial_bytes)
+                    retained=preserve_new_generated_audio(saved,OUTPUT.parent/'fast-generated-reply.wav')
+                    self.assertEqual(retained['retained_pcm_bytes'],len(full_pcm))
                     self.assertEqual(generated_replies[0]['reply'],record['assistant'])
                     async with connect(base+'3',extra_headers=headers,close_timeout=1) as third:
                         await expect(third,lambda k,e:k=='event' and e.get('type')=='hello',8)
@@ -213,6 +216,7 @@ class StreamedPhononNoAction(unittest.TestCase):
                             'canonical_answer_not_fresh':False,'fast_foreground_direct_answer':True,'canonical_fresh_reply':generated_replies[0],'source_original_wav_sha256':SOURCE_SHA,
                             'tts_wav_sha256':hashlib.sha256(saved.read_bytes()).hexdigest(),
                             'generated_pcm_bytes':len(full_pcm),'partial_pcm_before_disconnect':partial_bytes,
+                            'preserved_generated_audio':retained,
                             'played_pcm_recovery_exact':True,'normal_ack':True,'no_replay_after_ack':True,
                             'model_action_calls':0,'fresh_canonical_response_calls':len(canonical_source_only),
                             'real_Whisper_calls':len(asr_calls),'real_TTS_service':server.cfg().tts.service_engine,

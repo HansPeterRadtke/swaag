@@ -144,3 +144,40 @@ def test_fast_nitro_only_emits_json_after_verifying_full_event_receipts():
     assert "root/'.fast_oneuse" not in text  # marker rooted only in session namespace
     assert "claim_one_inference" in text
     assert 'journal_sha256' in text
+
+
+def test_preserve_generated_wav_is_exact_private_and_nonreplayable(tmp_path):
+    import wave
+    from fast_voice_audio_evidence import preserve_new_generated_audio
+    source=tmp_path/'temporary_stream.wav';target=tmp_path/'preserved.wav'
+    with wave.open(str(source),'wb') as wf:
+        wf.setnchannels(1);wf.setsampwidth(2);wf.setframerate(16000)
+        wf.writeframes((b'\x10\x00')*32000)
+    data=source.read_bytes()
+    result=preserve_new_generated_audio(source,target)
+    assert result['retained_wav_sha256']==hashlib.sha256(data).hexdigest()
+    assert result['retained_pcm_bytes']==64000
+    assert target.read_bytes()==data
+    assert target.stat().st_mode&0o777==0o600
+    with pytest.raises(FileExistsError):
+        preserve_new_generated_audio(source,target)
+    assert target.read_bytes()==data
+
+
+@pytest.mark.parametrize('bad',[
+    b'',b'not_wav',b'RIFF'+b'\0'*45,
+])
+def test_preserve_generated_wav_rejects_invalid_pcm_before_copy(tmp_path,bad):
+    from fast_voice_audio_evidence import preserve_new_generated_audio
+    src=tmp_path/'bad.wav';src.write_bytes(bad)
+    dst=tmp_path/'preserved.wav'
+    with pytest.raises((ValueError,EOFError)):
+        preserve_new_generated_audio(src,dst)
+    assert not dst.exists()
+
+
+def test_fast_voice_acceptance_imports_real_wav_preserver():
+    source=(HERE/'verify_real_voice_fast_foreground_reconnect.py').read_text()
+    assert 'from fast_voice_audio_evidence import preserve_new_generated_audio' in source
+    assert "OUTPUT.parent/'fast-generated-reply.wav'" in source
+    assert "'preserved_generated_audio':retained" in source

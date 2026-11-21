@@ -729,3 +729,14 @@ WebSocket playback. A semantic `delegate` result is a **test refusal**, not
 permission for a tool action or a fake success. Source tests alone cannot
 prove model performance; see the November twenty-one evaluation report for
 separate actual outcome and latency evidence when available.
+
+The first genuine fast-foreground no-action audio acceptance has now passed
+with the original source audio, resident Whisper, a fresh single-call
+Qwen3.8 fast controller (not the slower full orchestrator), Phonon Easton
+streaming and byte-exact four-WebSocket replay/normal ACK. The measured
+model step was about five seconds and the complete isolated call around
+eighteen seconds, under the zero-tool and one-use boundary. See the
+November twenty-one Phonon evaluation for cross-host original event receipts.
+The test-only audio evidence helper can retain the actual newly synthesized
+WAV for a separate independent speech-content check; it never changes live
+phone audio or owner speaker authorization.
