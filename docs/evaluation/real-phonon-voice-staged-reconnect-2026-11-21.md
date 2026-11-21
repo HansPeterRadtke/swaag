@@ -94,3 +94,62 @@ SWAAG reply is generated from the **same** reviewed turn, that the server
 identifies the true owner, or that the released Android app plays the full
 answer on a physical phone. The original owner speaker/semantic-turn and
 production deployment gates remain open.
+
+## November 21: fresh same-turn canonical SWAAG → live Phonon → reconnect
+
+A **further** isolated test finally used the **current recorded speech from the same authenticated localhost WebSocket session**, passed it through a real resident Thor Whisper Large-v3 request, preserved the resulting draft for **test-only manual review**, and then called a **fresh actual canonical SWAAG foreground orchestrator** (Nitro) through an intercepted test-only external gateway. The latter ran with an independently verified explicit **zero-tool** configuration, no side-effect or stateful permission and no tool loader; user speech was transmitted on a fixed SSH subprocess's **standard input**, never interpolated into a shell. The model answer was validated **before any audio synthesis**. The real Jetson `VoiceSession.answer` and Phonon stream generated audio after that response, while the test disconnected on the second WebSocket generation after one thousand nine hundred twenty PCM bytes. The third socket recovered the **exact** stored PCM, acknowledged normal playback, and the fourth socket did **not** replay. This is a successful **isolated same-turn text/voice/TTS transport integration**, not a production app or genuine owner microphone authentication.
+
+The **first** fresh same-turn test proved the mechanical pipeline but **failed voice-text quality**. SWAAG responded with a two-hundred-forty-three-character self-description of absent tool permissions and **repeated** the same clarification question. The remote canonical history confirms **one completed model request after seventy-five-point-two seconds, zero tools and zero workers**. The audio/reconnect transport passed, but this was **not** accepted as a satisfactory voice response. Original evidence remains in private Jetson `fifth-fresh-canonical-20261121` and Nitro `fresh-reviewed-voice-canonical-20261121` folders; neither session has been overwritten or replayed.
+
+A strict acceptance-only validator, `validate_short_voice_clarification`, was added to the owning staged utility. It requires exactly **one** short natural completed question and rejects repeated questions, internal tool/policy disclaimers and malformed/verbose text; it **never rewrites the model response**. The new source-pinned script `scripts/demos/verify_real_voice_fresh_canonical_phonon.py` uses that gate in a **distinct** fresh no-tools canonical session. Its exact source SHA-256 is `577ce1be8cab0137196798080035838125a6438972fd471750907bbab157dea4`, matching the complete real Jetson tested script byte-for-byte. The separate Python unit suite checks this source hash explicitly, in addition to the quality gate. The complete test-only original WAV and independent historical no-tools source proof remain mandatory prerequisites; a run without the explicit `--run` and `SWAAG_STREAMED_PHONON_NOACTION=1` does not perform speech work. The fresh Nitro config is fixed and independently checked as entirely tool-free before admission.
+
+**Second fresh same-turn acceptance (verified):** The actual model produced a concise, correct, natural single question, **“What would you like to know about the passage?”** The fresh canonical durable journal contained exactly **one completed model request, zero tool calls, zero worker starts**, model elapsed time **sixty-eight-point-two seconds**, first-token latency **twenty-six-point-four seconds**. Independent Nitro evidence is in private `fresh-reviewed-voice-canonical-20261121-quality2/independent-fresh-response-evidence-20261121.json`, original journal SHA-256 `854bd60927d5e025eea62706610bc273457b62b50584bd78a1e023636e1adeea`. The Jetson result of **the same fresh reviewed voice turn** confirmed one real Whisper, one fresh SWAAG response, one real Phonon stream, four WebSocket generations, **seventy-six thousand eight hundred PCM bytes** of newly synthesized speech, first **one thousand nine hundred twenty bytes** delivered before disconnect, **exact full PCM recovery**, normal ACK, **no fourth-socket replay**, and **zero executed agent actions**. That complete isolated run took about **eighty-two-point-nine seconds**, including **seventy-five-point-seven seconds** for the SSH and canonical response and **one-point-three seconds** TTS streaming. Independent Jetson source hashes, emitted reply hash and PCM/ACK checks are in private `sixth-fresh-quality2-20261121/result.json` and `fresh-quality2-crosshost-verified-20261121.json`. The independent Nitro and Jetson reply hashes agree.
+
+**Still unverified:** persistent real owner speaker enrollment and identification, semantic automatic end-of-turn acceptance, **production** WebSocket server-to-SWAAG/TTS deployment, genuine physical Android microphone/speaker playback and background reconnection, the previously **denied physical lost-ACK scenario**, multi-sample speech recognition/latency percentiles and normal conversational response time. This test uses a previously approved public-domain recording and an explicitly test-only manual confirmation. It must not be described as authentic human owner approval, or as a production service release. The model's sixty-eight-second response alone is far too slow for a practical voice agent. It is not appropriate to optimize away authorization or contextual grounding just to improve speed.
+
+## November 21 afternoon: source-pinned quality-three run and single-use session admission
+
+The third genuinely fresh, no-action same-turn test used a **new** independent
+Nitro session rooted under `fresh-reviewed-voice-canonical-20261121-quality3`
+with exact source revision and config SHA verified on-host before execution.
+Its independent original journal records **one completed canonical model call,
+zero tools and zero workers**. The accepted natural answer was **“What aspect
+of the passage would you like to know about?”**. The model-to-Jetson turn took
+about seventy-one-point-six seconds, followed by a real Phonon Easton stream
+of about one-point-five seconds. Actual resident Whisper processed the
+original unchanged recording, first audio was delivered, and one thousand
+nine hundred twenty bytes were transmitted before disconnection. The third
+WebSocket delivered exactly the entire newly synthesized ninety-four thousand
+seven hundred twenty PCM bytes; a normal ACK persisted; no fourth-connection
+replay occurred. The isolated full test ran approximately seventy-nine-point-nine
+seconds. Exact private receipts remain under Jetson
+`real-canonical-reply-phonon-playback-20261121/seventh-fresh-quality3-20261121`
+and Nitro `fresh-reviewed-voice-canonical-20261121-quality3`. **The source
+actually used by that completed live run had SHA-256
+`7aab8bfc6db5cf4d19b56e6b7748c669ab867ef36bec03f29567276322e1af04`.**
+It is retained in the private Jetson `quality3_scripts` directory as original
+source evidence.
+
+A subsequent independently tested hardening removes the remaining risk of
+**silently reusing an older canonical test conversation**. The fresh runner
+now requires explicit `--canonical-source`, `--canonical-config`,
+`--expected-source-commit` and `--expected-config-sha256`. Before a live
+request, its remote read-only check verifies the exact source Git revision,
+the private config bytes and empty enabled-tool registry. It then calls
+`scripts/demos/claim_fresh_voice_noaction_session.py` on Nitro, which
+**atomically creates one mode-0600, single-use private marker** and refuses
+existing `session_*` directories or an already-used claim. This prevents
+concurrent and repeated execution under the same private session root,
+including after an uncertain model or socket outcome. The original and newer
+private voice session journals remain untouched.
+
+The claimed-session admission had **eight passing source tests** and a
+separate actual local private-filesystem test: its first claim succeeded, the
+marker matched the recorded admission with mode 0600, and a second attempted
+claim returned a nonzero `FileExistsError` without reopening the session.
+Additional source tests validate exact path grammar and fail-closed Git/config
+digests. **This added one-use guard is a follow-on deterministic improvement;
+the historical quality-three live run above predates the guard and must not be
+misrepresented as running the newer source.** Use a new private session and
+new proof for the next real acceptance; never call the same accepted `--run`
+again merely because its terminal output was lost.

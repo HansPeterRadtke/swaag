@@ -647,3 +647,24 @@ disconnection, exact saved-PCM replay and normal ACK. It still uses a pinned
 boundary; it does not establish authorization for a new real agent command or
 a physical phone release. Consult the matching evaluation report and both
 explicit opt-in guards before a fresh run.
+
+The later same-turn no-action script
+`scripts/demos/verify_real_voice_fresh_canonical_phonon.py` starts a fresh
+**isolated** zero-tool canonical SWAAG turn from the *current* reviewed
+recording. It requires a single natural question before live Phonon TTS,
+then verifies exact PCM recovery and normal four-WebSocket ACK. A longer
+earlier model response was correctly recorded as **voice-quality failure**;
+the separate accepted run is backed by independent Nitro canonical event
+journal and Jetson WAV/ACK receipts. It does not establish production phone
+authority, speaker enrollment or acceptable interactive model latency. See the
+November 21 evaluation report for the exact reproducible evidence and scope.
+
+Fresh voice no-action acceptance now also has a **single-use, fail-closed**
+canonical session claim. Before any live test, the Jetson runner verifies
+its exact Nitro Git revision, no-action config SHA and zero tool inventory.
+`claim_fresh_voice_noaction_session.py` exclusively claims the matching
+private session root; an older `session_*` or existing marker is refused.
+The claim is never auto-cleared after an ambiguous outcome. This concerns
+**isolated evaluation sessions only**, not live owner session management, and
+does not weaken the default production orchestrator capabilities. See the
+November twenty-one evaluation report for the source and evidence distinctions.

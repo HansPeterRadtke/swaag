@@ -149,3 +149,84 @@ def test_wrong_local_service_identity_fails_before_synthesis(monkeypatch):
     monkeypatch.setattr(DEMO,'build_opener',lambda *a:FakeOpener())
     with pytest.raises(RuntimeError,match='identity was not verified'):
         DEMO.synthesize('No action','http://127.0.0.1:15305/synthesize')
+
+
+def test_fresh_voice_clarification_gate_accepts_one_natural_question():
+    good='Would you like me to identify where that passage comes from?'
+    assert DEMO.validate_short_voice_clarification(good)==good
+
+
+@pytest.mark.parametrize('candidate',[
+    '', 'The passage was read.',
+    'What would you like? What would you like?',
+    'I have no tools or permission to act; what would you like me to do?',
+    'As an AI assistant, what would you like to know?',
+    'I cannot help with tools; what do you mean?',
+    '```Here is the result.``` What now?',
+    'Would you like me to identify this?\nPlease say yes.',
+    'What do you want me to do with this particularly long passage now that I have understood all of the things you explained about it previously and have thought through all of the possible options, including historical and literary references and quotation sources?'])
+def test_unacceptable_fresh_speech_answers_fail_closed(candidate):
+    with pytest.raises(ValueError):
+        DEMO.validate_short_voice_clarification(candidate)
+
+
+def test_observed_first_fresh_model_reply_did_not_meet_quality_gate():
+    observed=("I have no tools or permission to act, and I won't claim any action. "
+      "The recognized speech isn't an explicit question, so here is one short clarification: "
+      "what would you like me to do with this line? What would you like me to do with this line?")
+    with pytest.raises(ValueError):
+        DEMO.validate_short_voice_clarification(observed)
+
+
+def test_fresh_same_turn_acceptance_uses_bounded_remote_checkout_and_session():
+    path=ROOT/'scripts/demos/verify_real_voice_fresh_canonical_phonon.py'
+    raw=path.read_text(encoding='utf8')
+    assert "validate_pinned_swaag_paths(" in raw
+    assert "--canonical-config" in raw and "--expected-config-sha256" in raw
+    assert "--expected-source-commit" in raw and "--canonical-source" in raw
+    assert "checked_remote(cmd)" in raw  # actual zero-tool inventory is inspected
+    assert "scripts/demos/claim_fresh_voice_noaction_session.py" in raw
+    assert "claim.get('admitted') is not True" in raw
+    assert "prior_session_directories') != []" in raw
+    assert raw.index("checked_remote(cmd)") < raw.index("claim=json.loads(checked_remote(claim_cmd))")
+    assert raw.index("if args.evidence.exists():") < raw.index("claim=json.loads(checked_remote(claim_cmd))")
+    assert 'reply=validate_short_voice_clarification(completed.stdout.strip())' in raw
+    assert raw.index('reply=validate_short_voice_clarification(completed.stdout.strip())') < raw.index('canonical_source_only.append')
+    assert 'input=prompt,text=True,capture_output=True' in raw
+
+
+def test_pinned_remote_canonical_source_and_new_session_paths():
+    ok=DEMO.validate_pinned_swaag_paths(
+        '/data/src/worktrees/swaag-voice-phonon-integration-20261121',
+        '/data/var/swaag-benchmarks/fresh-reviewed-voice-canonical-20261121-quality3/noaction-config.toml',
+        '5'*40,'a'*64)
+    assert ok[0].endswith('integration-20261121')
+    assert 'quality3' in ok[1]
+
+
+@pytest.mark.parametrize('bad_source,bad_config',[
+    ('/tmp/untrusted',None),
+    ('/data/src/worktrees/../../etc',None),
+    ('/data/src/worktrees/id;curl',None),
+    ('/data/src/worktrees/a$(touch /tmp/x)',None),
+    (None,'/etc/voice-agent/ws.json'),
+    (None,'/data/var/swaag-benchmarks/../other/noaction-config.toml'),
+    (None,'/data/var/swaag-benchmarks/id;rm/noaction-config.toml'),
+])
+def test_untrusted_remote_paths_never_become_shell_commands(bad_source,bad_config):
+    source=bad_source or '/data/src/worktrees/swaag-voice-phonon-integration-20261121'
+    cfg=bad_config or '/data/var/swaag-benchmarks/fresh-reviewed-voice-canonical-20261121-quality3/noaction-config.toml'
+    with pytest.raises(ValueError):
+        DEMO.validate_pinned_swaag_paths(source,cfg,'5'*40,'a'*64)
+
+
+@pytest.mark.parametrize('bad_revision,bad_hash',[
+    ('not-commit',None),('x'*40,None),('5'*41,None),
+    (None,'nonhex'),(None,'z'*64),(None,'a'*63)
+])
+def test_wrong_remote_git_or_config_fingerprints_are_rejected(bad_revision,bad_hash):
+    with pytest.raises(ValueError):
+        DEMO.validate_pinned_swaag_paths(
+            '/data/src/worktrees/swaag-voice-phonon-integration-20261121',
+            '/data/var/swaag-benchmarks/fresh-reviewed-voice-canonical-20261121-quality3/noaction-config.toml',
+            bad_revision or '5'*40,bad_hash or 'a'*64)

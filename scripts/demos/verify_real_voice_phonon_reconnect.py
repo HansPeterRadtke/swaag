@@ -113,6 +113,46 @@ class RejectHttpRedirects(HTTPRedirectHandler):
         raise RuntimeError("TTS HTTP redirect forbidden: must remain on private loopback")
 
 
+def validate_pinned_swaag_paths(source_root: str, config_path: str,
+                                source_commit: str, config_sha256: str) -> tuple[str,str]:
+    """Allow only fixed-shaped on-host SWAAG working trees and private config.
+
+    Every argument is separately bound to the verified on-disk Git revision and
+    private configuration SHA before any model call. No user text is interpolated
+    into a shell command, and paths cannot contain shell metacharacters.
+    """
+    source_re=r'/data/src/worktrees/[a-zA-Z0-9][a-zA-Z0-9_-]{0,95}'
+    config_re=r'/data/var/swaag-benchmarks/[a-zA-Z0-9][a-zA-Z0-9_-]{0,95}/noaction-config\.toml'
+    if type(source_root) is not str or re.fullmatch(source_re,source_root) is None:
+        raise ValueError('Canonical SWAAG source must be a named /data/src/worktrees path')
+    if type(config_path) is not str or re.fullmatch(config_re,config_path) is None:
+        raise ValueError('Fresh noaction config must be under the private SWAAG benchmark root')
+    for value in (source_commit,config_sha256):
+        if type(value) is not str or re.fullmatch(r'[0-9a-f]{40}|[0-9a-f]{64}',value) is None:
+            raise ValueError('Expected source revision and config SHA-256 must be hex digests')
+    if len(source_commit)!=40 or len(config_sha256)!=64:
+        raise ValueError('Expected source revision must be SHA-1 and config must be SHA-256')
+    return source_root,config_path
+
+
+def validate_short_voice_clarification(text: str) -> str:
+    """Reject unhelpful meta, repeated or unfinished fresh no-action answers.
+
+    This is a narrow acceptance gate for an *unverified reading* where the
+    correct user-facing response is exactly one natural clarification question.
+    It does not invent, shorten, or semantically rewrite the model's answer.
+    """
+    if type(text) is not str or not text.strip():
+        raise ValueError('No usable user-facing answer')
+    plain=' '.join(text.split())
+    if (len(plain)>170 or len(plain.split())>28 or plain.count('?')!=1
+            or not plain.endswith('?') or '\n' in text):
+        raise ValueError('Voice answer is not one short completed clarification question')
+    if re.search(r"(?:\b(?:tools?|permissions?|system prompt|language model|I cannot|I can't|I won't|AI assistant)\b|[`#*])",plain,re.I):
+        raise ValueError('Voice answer contains internal capability or formatting meta')
+    return plain
+
+
 def synthesize(text: str, endpoint: str) -> tuple[bytes,dict]:
     endpoint = safe_loopback_tts_url(endpoint)
     # Never honor proxy environment variables or HTTP redirects for owner
