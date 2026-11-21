@@ -314,3 +314,91 @@ error and required manual review. A standalone quoted statement is not an
 automatically authorized command. Responses from one resident model under
 shared GPU contention have variable latency; production phone experience
 and percentile response times remain unverified.
+
+### Second fast real same-turn voice acceptance: immutable TTS and spoken output
+
+A separate **new** single-use Nitro fast SWAAG session and isolated Jetson
+recorded-speech test verified the same real original WAV, resident Whisper,
+one actual Qwen3.8 Q8 **fast direct** model response, and Phonon Easton
+streaming with exact four-WebSocket recovery. The second attempt used canonical
+source revision `20d27feef91bdce97eb2d862ed005fbd8e8660e9` and a distinct
+no-action config/session and never replayed the first. Its private append-only
+Nitro model journal confirms one model request and response, one finished
+turn, **zero tools and zero workers**, one-use claim and extra inference
+marker, with model elapsed **nine-point-three-five seconds**, first token
+**one-point-four-six seconds**, fast stage **thirteen-point-zero seconds**.
+The actual Jetson test took about **twenty-five-point-two seconds**, with
+Phonon streaming around **two-point-eight-eight seconds**. The generated
+**one hundred seventeen thousand seven hundred sixty** PCM bytes were
+recovered byte-for-byte after one thousand nine hundred twenty were sent
+before deliberate disconnection; the normal ACK was persisted and the
+fourth connection did not replay. The fresh assistant reply was **“I
+received your message. What would you like to know about that quote?”**.
+
+The NEW versioned helper `fast_voice_audio_evidence.py` saved the **actual
+newly generated** private WAV before temporary test fixture cleanup: exact
+SHA-256 `56e81fe7050641490a634e064705673a1f6c61ee2cf46d6b09f33d8270e7fae7`,
+mode 0600, non-silent mono sixteen-kilohertz PCM, no overwrite. Jetson then
+passed that **same exact WAV**, not a separately synthesized substitute,
+through resident Whisper Large-v3: it transcribed the exact **thirteen of
+thirteen** intended words (one sample word edit distance zero). The PCM RMS
+was approximately two thousand two hundred forty-nine, peak amplitude
+fourteen thousand three hundred twenty-two, with **zero clipped samples**
+at the configured threshold. This automated audio-output check is **not** a
+human perceptual review or a statistical model-quality estimate. The
+unchanged input-side original source still has the previously documented
+meaning-changing two-of-twenty-word ASR error and must remain manually
+reviewable.
+
+Private cross-host evidence: Nitro
+`/data/var/swaag-benchmarks/fast-foreground-voice-e2e-retained-20261121/independent_retained_fast_model_verification.json`
+with actual journal SHA-256
+`3800e7e5b727c9b6a41347b57a73245e36f1a93f8d1338803384090f0dd45d4f`;
+Jetson
+`/data/var/swaag-benchmarks/fast-voice-e2e-retained-20261121/independent_retained_fast_voice_evidence.json`
+and `retained-fast-reply-actual-Whisper-backtranscription.json`, plus the
+restricted original WAV in `real-once-20261121/fast-generated-reply.wav`.
+The corresponding private source-output and canonical reply hashes agree.
+The live source/recorder was not deployed to the physical Android phone.
+
+### Independent live negative boundary: model delegation cannot execute tools
+
+A distinct private one-use no-action Nitro test submitted the **synthetic
+test-only**, non-owner text “Use the calculator to compute six times seven.”
+The actual resident Qwen model returned fast **`mode=delegate`** after about
+**seven-point-nine-seven seconds**, and the fast-only acceptance **exited
+with a controlled nonzero refusal**. The model proposed an intention to use
+the calculator, but the source and independent journal show **one real model
+request and response, one `assistant_progress` proposal, zero actual tool
+calls, zero tool receipts, zero workers, no control consumption and no
+finished turn**. The deep controller was not invoked. Its one-use claim and
+model invocation marker remain, so this pending simulated control must never
+be replayed as if it were an already completed external effect. Private
+reproducible evidence is at
+`/data/var/swaag-benchmarks/fast-foreground-delegation-noaction-20261121/independent_real_negative_delegation_evidence.json`.
+
+The negative test also exposed **a temporary supervisor bookkeeping entry**
+when the fast-stage method was invoked directly outside the full controller.
+The normal production controller already releases that observer in its
+`finally` block. The isolated fast-only runner now uses the same scoped
+`supervisor.finish_session(session_id)` API on every exit, without altering
+the durable control queue or falsely marking the task complete. A new
+source-backed regression tests the negative decision, retained pending
+control, zero tool calls and observer release, with **twenty-four** focused
+runner tests passing. The original model evidence is unchanged; the cleanup
+source correction is later than this live negative test, so no retrospective
+claim is made that the model ran new code.
+
+### Remaining decision gates and measurement limits
+
+Across the individually observed real, separate Qwen3.8 fast turns, model
+latency varies even on the same short transcript. A four-observation
+experimental set includes model times of about five, seven, nine and twenty
+seconds; the earlier full-controller live response took about sixty-seven
+seconds. They have different prompt lengths and shared GPU loads, so they
+**do not establish a general median, tail percentile, controlled speedup or
+production service-level objective**. Reproducible low-latency operation
+needs cross-load acceptance with complete authority/history. Genuine owner
+speaker identity, semantic automatic turn completion, physical Android
+mic/playback, live production SWAAG server deployment and actual owner
+commands remain outside these no-action tests.

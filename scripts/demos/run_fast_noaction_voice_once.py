@@ -120,6 +120,7 @@ def main(argv=None) -> int:
         with redirect_stdout(model_console):
             runtime=AgentRuntime(cfg)
             service=CommunicationService(runtime,orchestrator_runtime=runtime)
+            state=None
             try:
                 state=service._orchestrator_state()
                 assert not runtime.tools.enabled_tools(cfg)
@@ -152,7 +153,17 @@ def main(argv=None) -> int:
                 report.update({'status':'verified_one_fast_natural_clarification',
                                'reply':result,'reply_sha256':hashlib.sha256(result.encode()).hexdigest(),
                                'full_orchestrator_called':False})
-            finally:service.close()
+            finally:
+                # Calling the optional fast method directly bypasses the
+                # enclosing production orchestration finally block. Clear
+                # the *ephemeral observer registration* using the same owning
+                # supervisor lifecycle API. Do not consume a delegated control,
+                # fake completion or alter the durable event history.
+                if state is not None:
+                    service.supervisor.finish_session(state.session_id)
+                    report['supervisor_observer_released']=not bool(
+                        service.supervisor.snapshot()['active_sessions'])
+                service.close()
     except BaseException as exc:
         report['error_type']=type(exc).__name__
         report['error_message']=str(exc)[:400]

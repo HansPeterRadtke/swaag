@@ -181,3 +181,55 @@ def test_fast_voice_acceptance_imports_real_wav_preserver():
     assert 'from fast_voice_audio_evidence import preserve_new_generated_audio' in source
     assert "OUTPUT.parent/'fast-generated-reply.wav'" in source
     assert "'preserved_generated_audio':retained" in source
+
+
+def test_command_like_fast_delegation_has_no_effect_and_keeps_authority_pending(make_config):
+    """A model proposal to use a tool is not execution or owner approval."""
+    import json
+    from swaag.runtime import AgentRuntime
+    from swaag.communication import CommunicationService
+    from tests.test_agent_action_loop import FakeModelClient
+
+    cfg=make_config(model__context_limit=32000,
+                    communication__fast_initial_reply=True,
+                    runtime__completion_evaluation_enabled=False)
+    cfg.tools.enabled=[]
+    cfg.tools.allow_side_effect_tools=False
+    cfg.tools.allow_stateful_tools=False
+    cfg.tools.staged_discovery=False
+    client=FakeModelClient([json.dumps({'mode':'delegate',
+        'reply':'I will use the calculator to compute six times seven.'})])
+    runtime=AgentRuntime(cfg,model_client=client)
+    service=CommunicationService(runtime,orchestrator_runtime=runtime)
+    try:
+        state=service._orchestrator_state()
+        receipt=service._receive_orchestrator_message(
+            'Use the calculator to compute six times seven.',control_id='synthetic_command_refusal')
+        candidate=service._try_fast_foreground_reply(state,receipt)
+        assert candidate and candidate['mode']=='delegate'
+        events=runtime.history.read_history(state.session_id)
+        types=[x.event_type for x in events]
+        assert types.count('model_request_sent')==1
+        assert types.count('model_response_received')==1
+        assert types.count('assistant_progress')==1
+        assert 'tool_called' not in types
+        assert 'control_message_processed' not in types
+        assert 'turn_finished' not in types
+        assert runtime.history.list_pending_control_messages(state.session_id)
+        assert not runtime.tools.enabled_tools(cfg)
+        # Direct fast-only acceptance must release this transient observer,
+        # matching the outer production orchestrator's finally block.
+        assert service.supervisor.snapshot()['active_sessions']
+        service.supervisor.finish_session(state.session_id)
+        assert service.supervisor.snapshot()['active_sessions']==[]
+        assert runtime.history.list_pending_control_messages(state.session_id)
+    finally:
+        service.close()
+
+
+def test_direct_fast_only_runner_uses_same_supervisor_cleanup_as_production():
+    path=HERE/'run_fast_noaction_voice_once.py'
+    source=path.read_text()
+    assert 'service.supervisor.finish_session(state.session_id)' in source
+    assert "report['supervisor_observer_released']" in source
+    assert source.index('service.supervisor.finish_session(state.session_id)') < source.index('service.close()',source.index('service.supervisor.finish_session(state.session_id)'))

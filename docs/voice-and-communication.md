@@ -740,3 +740,13 @@ November twenty-one Phonon evaluation for cross-host original event receipts.
 The test-only audio evidence helper can retain the actual newly synthesized
 WAV for a separate independent speech-content check; it never changes live
 phone audio or owner speaker authorization.
+
+A second isolated **real fast voice** test now also retains its exact freshly
+generated Phonon WAV before fixture teardown; resident Whisper recovered all
+thirteen expected words from that actual audio sample. A separate genuine
+fast-model negative test proposed delegation for a calculator command but
+executed **no tools or workers** and refused to mark the pending turn
+complete. The fast-only evaluation runner now releases its supervisor
+observer in `finally`, mirroring the production controller, without
+consuming any undecided control. Source/original receipts and limitations
+are recorded in the November twenty-one voice evaluation report.
