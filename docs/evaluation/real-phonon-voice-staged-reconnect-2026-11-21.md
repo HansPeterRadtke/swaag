@@ -225,3 +225,29 @@ production service deployment remain unverified or outside this test scope.
 The canonical response duration remains far too slow for routine interactive
 voice use. No resident service was restarted or reconfigured, no physical
 phone touched, and no external user-command operation was executed.
+
+## Fast-foreground full voice acceptance candidate — source-only admission
+
+The real fast-foreground model evaluation identified a substantial SWAAG
+latency opportunity without removing context or tool authority. A new
+**separate** same-turn no-action voice acceptance consists of
+`scripts/demos/run_fast_noaction_voice_once.py` (Nitro) and
+`scripts/demos/verify_real_voice_fast_foreground_reconnect.py` (Jetson).
+The Jetson side uses the same **real** source WAV, resident Whisper and
+manual test-only review, then passes the **exact ASR text over stdin** to a
+newly admitted private canonical SWAAG fast-foreground call. Nitro requires
+a verified source revision, configuration fingerprint, zero tool inventory,
+pre-existing fresh one-use claim and a second exclusive inference marker.
+The `generate_fast_foreground_response` path may **answer** with one real
+model call, or it may **delegate**. In the latter case this acceptance
+**fails closed** and never starts the full controller, a worker or any
+action. Only a short natural question and one completed zero-tool durable
+turn can proceed into real Phonon streaming and four-WebSocket media recovery.
+
+Source and unit tests are not a successful live acceptance; the real result
+requires an independently checked actual Nitro model journal, a real Jetson
+Whisper request, a Phonon output stream, exact saved PCM replay, the normal
+ACK and no final replay from a **new** unused private run. Preserve private
+logs and do not reuse any previous source session. No new resident service,
+Android release or owner identity/authorization is introduced by this
+experiment.

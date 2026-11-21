@@ -719,3 +719,13 @@ guards. The live private model journals and comparisons are on Nitro under
 checks alone do **not** establish same-turn voice-to-Phonon playback or
 production phone usability. A separately source-pinned real audio/reconnect
 acceptance must verify those stages before release.
+
+The optional, source-pinned **fast voice** no-action experiment uses a distinct
+`run_fast_noaction_voice_once.py` helper with single-use exact ASR input,
+zero enabled tools, no deep fallback and a short-question quality fence. Its
+Jetson counterpart is `verify_real_voice_fast_foreground_reconnect.py` and
+continues through real Phonon TTS and normal recorded-speech manual-review
+WebSocket playback. A semantic `delegate` result is a **test refusal**, not
+permission for a tool action or a fake success. Source tests alone cannot
+prove model performance; see the November twenty-one evaluation report for
+separate actual outcome and latency evidence when available.
