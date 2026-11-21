@@ -153,3 +153,75 @@ the historical quality-three live run above predates the guard and must not be
 misrepresented as running the newer source.** Use a new private session and
 new proof for the next real acceptance; never call the same accepted `--run`
 again merely because its terminal output was lost.
+
+## Final November 21 same-turn run: published one-use guard, actual resident voices
+
+The **published** canonical SWAAG source revision
+`243c12c8fd3707490477fd27c1cf8c5bb6831d2b` was independently verified
+on remote `main` before the next private real run. On Nitro, the new
+`fresh-reviewed-voice-canonical-20261121-quality4` root used a previously
+nonexistent session directory, mode-0600 private no-action configuration
+SHA-256 `48b7bd7c8e23f81e75cda4f370e1fa5dab6d45cf9d018334944b5905a8e2f57f`,
+exact source Git revision and explicit zero-tool registry. The Jetson runner
+source copied byte-for-byte from that published revision was checked again
+against the stored original voice source and private historical proof. A
+source-only dry run created **no** session or model request. On the actual
+`--run`, the new Nitro single-use claim was durably admitted, recorded **zero
+prior session directories**, and blocked any duplicate claim for that same
+configuration.
+
+The complete original real recorded speech then passed through one actual
+resident Whisper request into **manual test-only review**, then one **new**
+canonical SWAAG tool-free model turn, then live Nitro CPU Phonon Easton
+streaming through the existing Jetson private tunnel. The no-action reply
+was the natural, accepted single question, **“What would you like to know
+about the passage?”**. The model's independent Nitro append-only journal
+contains **one model request, one response, one finished turn, zero tools,
+zero tool results, zero workers**. The model portion took about
+**sixty-seven-point-five seconds** with time to first token around
+**twenty-six-point-six seconds**. Jetson's SSH/orchestrator boundary took
+about seventy-four seconds in that run. The actual Phonon streamed response
+completed in about **zero-point-eight seconds**. A total of
+**seventy-six thousand eight hundred PCM bytes** were synthesized, the first
+**one thousand nine hundred twenty** delivered before intentional disconnect,
+and the **exact entire freshly generated audio** was recovered on the third
+WebSocket connection. The normal ACK was durably recorded; a fourth socket
+correctly did not replay. The complete isolated run finished in about
+**eighty-one seconds**, exit zero, with **no agent tools/actions**.
+
+Independent cross-host proof is private, not copied into Git. On Nitro see
+`/data/var/swaag-benchmarks/fresh-reviewed-voice-canonical-20261121-quality4/independent-oneuse-live-canonical-checkpoint.json`
+plus the same directory's preserved exact event journal and single-use
+claim. On Jetson see
+`/data/var/swaag-benchmarks/real-canonical-reply-phonon-playback-20261121/eighth-fresh-quality4-20261121/result.json`
+and `quality4-independent-crosshost-evidence.json`. The two independent
+checks record the same emitted reply SHA-256
+`97f61b088c8c4308493a85f6c89ff462997ea39b79881883d53eeb80ee7fa57b1`.
+The source-provenance checksum of the Jetson-copied **final guarded** test is
+`e70fd5a908b795cc362d310d287cf88b7fa13e293cafab14b437844ab384f669`.
+The single-use guard also has independently observed first-claim success and
+second-claim refusal on a separate private Nitro test root, plus a combined
+**two-hundred-eighty-one-test regression pass** and follow-on focused checks.
+Those test sets overlap and are not the entire SWAAG repository-wide suite.
+
+For **independent spoken-content quality**, an earlier generated real Phonon
+Easton WAV (SHA-256 `59ae90f298e95f42662bf75e4bef0640e7ea91261dddd29ecf358eff4115352a`)
+was sent back through resident Whisper Large-v3. Its transcription matched
+**all nineteen words** of the intended SWAAG answer, **zero word errors in
+that single test**. Exact private evidence is on Jetson in
+`/data/var/swaag-benchmarks/voice-output-recognition-20261121/original-reply-backtranscription.json`.
+This result **does not** overturn the separately recorded error on the
+**input** public-domain speech where Whisper changed “soft hearted” into
+“thought-tortured” (two errors out of twenty words): different recorded
+sources, input/output directions and conditions. Neither single sample is
+a population-level model accuracy claim.
+
+**Unresolved production gates remain unchanged:** A test-only local manual
+confirmation is not real human owner/speaker authentication. These isolated
+servers are not the live phone's permanent service or SWAAG owner session.
+Automatic semantic end-of-turn, phone microphone and audible playback, owner
+identity, real-world interruption policies, physical lost-ACK behavior and
+production service deployment remain unverified or outside this test scope.
+The canonical response duration remains far too slow for routine interactive
+voice use. No resident service was restarted or reconfigured, no physical
+phone touched, and no external user-command operation was executed.

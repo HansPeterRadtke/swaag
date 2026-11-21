@@ -668,3 +668,14 @@ The claim is never auto-cleared after an ambiguous outcome. This concerns
 **isolated evaluation sessions only**, not live owner session management, and
 does not weaken the default production orchestrator capabilities. See the
 November twenty-one evaluation report for the source and evidence distinctions.
+
+Final same-turn source-pinned acceptance repeated under the **published
+single-use admission guard**. The original public-domain WAV was actually
+recognized, manually reviewed in the isolated local test, sent as a fresh
+zero-tool canonical SWAAG turn, synthesized by real Phonon Easton and
+recovered byte-for-byte after a socket drop. The durable claim, zero-tool
+model journal, normal playback ACK, no fourth-connection replay and private
+source hashes were independently checked on Nitro and Jetson. Runtime is
+still roughly eighty seconds and the production phone/speaker/semantic-turn
+release gates remain open. The full reproducibility contract and exact
+proofs are in the November twenty-one evaluation report.
