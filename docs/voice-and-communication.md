@@ -679,3 +679,43 @@ source hashes were independently checked on Nitro and Jetson. Runtime is
 still roughly eighty seconds and the production phone/speaker/semantic-turn
 release gates remain open. The full reproducibility contract and exact
 proofs are in the November twenty-one evaluation report.
+
+## November 21: short fast-foreground follow-up for an unrequested spoken passage
+
+The existing SWAAG **fast foreground** remains a *semantic no-tool proposal*
+with an authoritative controller fallback, not microphone verification or new
+permission. A formerly unrequested recorded public-domain sentence was
+actually transcribed by resident Whisper, then sent exactly as text into the
+optional fast foreground with an empty tool registry. On the existing
+Qwen3.8 twenty-seven-billion Q8 model, the first one-call trial returned
+only a generic receipt (“audio is unverified”) in about seven seconds of
+model time, eleven-point-six seconds end-to-end, with **one finished turn and
+zero tools**. That was safe but did not answer the open conversational intent.
+
+The reviewed fixed prompt now explicitly distinguishes **standalone quoted
+text with no question/task** from a hearing check. In that case the model
+should ask a brief natural clarification, without inventing microphone
+verification, paraphrasing a possibly erroneous transcription as a fact, or
+claiming tool actions. The other existing authority and status requirements
+are unchanged, and the complete template remains under its established
+two-thousand-one-hundred-character budget. After this source change, a second
+**genuine separate** one-call Qwen trial on the exact same original ASR text
+asked **“I received your message. What would you like to know about that quote?”**
+with **one completed turn, zero tools and zero workers**. Model generation
+took about twenty-point-two seconds; overall about twenty-three-point-eight
+seconds. The variation from the earlier seven-second generation is a
+**single-sample load variation**, not evidence that the edited prompt increased
+compute cost. Both fast contexts contained approximately seven hundred input
+tokens, versus the previous full-orchestrator voice-acceptance context of
+several thousand tokens and an observed model duration around sixty-seven
+seconds. No phone, speech server, TTS runtime or external target was changed.
+
+The new prompt has deterministic unit verification in
+`tests/test_fast_foreground_reply.py` and must retain the existing hearing
+check, identity, worker status, current-authority and do-not-invent-result
+guards. The live private model journals and comparisons are on Nitro under
+`/data/var/swaag-benchmarks/fast-foreground-live-20261121` and the separate
+`fast-foreground-live-20261121-quote-v2` folder. These two text-inference
+checks alone do **not** establish same-turn voice-to-Phonon playback or
+production phone usability. A separately source-pinned real audio/reconnect
+acceptance must verify those stages before release.

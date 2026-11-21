@@ -307,6 +307,27 @@ def test_fast_prompt_separates_system_description_from_observed_state(make_confi
         service.close()
 
 
+def test_ambiguous_quote_fast_prompt_asks_question_without_inventing_speech_evidence(make_config):
+    from swaag.foreground_fast import generate_fast_foreground_response
+    ambiguous=("he was thought-tortured and impetuous said beth and being in love "
+               "he didn't stop to count the cost")
+    service,runtime,client=setup(make_config, [fast('answer',
+        'What would you like to know about that passage?')])
+    try:
+        state=service._orchestrator_state()
+        answer=generate_fast_foreground_response(runtime,state,ambiguous)
+        assert answer and answer.mode=='answer'
+        assert answer.reply=='What would you like to know about that passage?'
+        assert len(client.requests)==1
+        prompt=client.requests[0]['prompt']
+        assert 'A standalone quote without a question or task is not a hearing check' in prompt
+        assert 'never pretend to hear audio' in prompt
+        assert ambiguous in prompt
+        assert 'For hearing checks, confirm only receipt of text' in prompt
+        assert len(runtime.prompts._load_template('foreground_fast_system.txt'))<2100
+    finally:service.close()
+
+
 def test_fast_static_prompt_smaller_than_previous_policy_block(make_config):
     from swaag.foreground_fast import generate_fast_foreground_response
     service, runtime, client = setup(make_config, [fast('answer', 'I am SWAAG.')])
