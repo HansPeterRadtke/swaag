@@ -14,7 +14,7 @@ A worker remains a sequential agent loop. Multiple workers may run independently
 
 ## Installation and validation
 
-For development, create a virtual environment and install the package in editable mode. Production service environments should use `scripts/install-runtime-env.sh`, which installs the pinned runtime under `/data/var/swaag` rather than depending on a user home directory.
+For development, create a virtual environment and install the package in editable mode. Production service environments should use `scripts/install-runtime-env.sh`, which installs the pinned runtime under `/data/var/swaag` rather than depending on a user home directory. The installer now runs the existing read-only source/package/SQLite preflight **before** it reports success: it rejects SQLite older than 3.51.3, missing FTS5 or installed/source drift. A failed preflight means the runtime is **not** release-ready even when dependency sync succeeded; inspect its JSON reason and correct the Python/SQLite environment before attempting a deployment. This is a post-install safety gate, not an atomic upgrade or a live-process check. Never run the installer against an active service environment without an authorized, coordinated deployment and rollback plan.
 
 Use `python -m swaag --help` for the main CLI, `python -m swaag.benchmark --help` for benchmarks, and `python -m swaag doctor` to check the configured model endpoint and constrained-output path. The deterministic regression suite is `python -m pytest -q` from an environment containing the project test dependencies.
 

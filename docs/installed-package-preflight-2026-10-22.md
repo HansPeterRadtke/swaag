@@ -29,3 +29,16 @@ A new, isolated, non-service candidate was produced under the SWAAG runtime-data
 The configured model identity separates **Qwen3 Coder** for the communication/foreground role from **Qwen3.8 Q8** for worker/default role. Both corresponding model health endpoints returned HTTP 200. A model health response proves only endpoint health, not correct semantic routing or generation under contention.
 
 The currently *deployed* SWAAG virtual environment was **not** changed: the live preflight still reports package drift. The existing communication process, voice gateway and model service were **not restarted or reinstalled**. Releasing the candidate to live services is a separate, idle-safe coordination step requiring process version and voice-agent regression evidence, not something to infer from source/package tests.
+
+## Installer integration — November 22, 2026
+
+The canonical installer now invokes this preflight after its frozen,
+non-editable package synchronization and before printing the runtime-ready
+message. Its nonzero status propagates through `set -e`, including for an
+unsupported SQLite version or package content drift. A deterministic fake-uv
+regression checks both a rejected SQLite 3.50.4 interpreter and an accepted
+SQLite 3.53.1 interpreter with an exact copied package; it is not an actual
+installation or live-service acceptance. This closes a misleading success
+reporting path but does **not** make installer writes transactional, upgrade an
+old SQLite library automatically, or authorize touching a running SWAAG host.
+Stage first and separately verify the running service after authorized release.
