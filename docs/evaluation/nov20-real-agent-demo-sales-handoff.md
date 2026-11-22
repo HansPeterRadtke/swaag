@@ -66,3 +66,50 @@ and a new supervisor correction completed the task. The final
 focused Python compatibility, history, authority, tool-scope
 and evidence-verification suite passed 128 tests. Do not
 represent these as a complete repository-wide test run.
+
+
+## New independently checked acceptance, November 22, 2026
+
+The unchanged real agent event journal was independently verified again
+against the original source-backed oracle: **341 events**, six actual
+read/list/calculator tool calls, one controlled tool error, four model
+requests with three responses, all **twelve of twelve** receipt/lineage
+checks true, and **verified only after a distinct supervisor correction**.
+This is not a fresh second agent/model run. The source's read-only test
+suite covering the real demo verifier and preparations passed sixteen
+additional focused cases. This evidence reinforces the original limited
+buyer claim without retroactively converting a failed first attempt into
+success.
+
+Separate real voice-output acceptance used previously generated, hash-pinned
+Phonon Easton WAVs from real SWAAG **no-tool** answer sessions. Two distinct
+stored answers were independently transcribed through the existing resident
+Whisper verifier on November twenty-second: **eleven of eleven** and
+**thirteen of thirteen** intended words recovered exactly in these samples.
+The second run used the now-published standard-library, one-use, fail-closed
+`verify_retained_voice_spoken_content.py` checker and saved a source/wave/
+transcription provenance receipt. Seventeen deterministic checks cover
+unverified original receipts, changed WAVs, silent/wrong media, provider
+failure, a mismatching transcript, no implicit model contact and refusal
+of an uncertain replay. **No new SWAAG tool/worker action or new TTS
+synthesis was performed** by this checker; only the isolated resident
+Whisper read was newly requested. This is an acoustic transcript agreement
+check, not a claim that a human physically heard or understood the reply.
+
+The current **production Jetson WebSocket service** was independently
+observed running a different, older source file than the isolated latest
+voice tests. Its live loaded source is not represented by the newer
+no-action acceptance results. Real owner-speaker authorization, semantic
+end-of-turn reliability, physical Android microphone/speaker playback,
+production upgrade/rollback, cross-load latency and performance percentiles
+remain unverified. Do **not** advertise a fully deployed voice assistant,
+true owner-authenticated automation, low-latency service guarantee,
+independent live-customer proof or a production-ready mobile product.
+
+The current public Multiverse `/swaag/#evaluation` page still points to
+source test files but does not show this independently verified multi-step
+agent run. The **one** enrolled shared sales/website worker can evaluate a
+future source-linked, properly limited presentation only under its own
+website-change/publication authority. This SWAAG project provides these
+public-safe source documents and tests only; it has not changed the
+website, contacted a buyer or published marketing claims.
