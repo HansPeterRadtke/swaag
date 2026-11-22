@@ -488,3 +488,63 @@ hearing/playback, reconnect, and trusted owner-only enrollment/anti-replay.
 Do not hot-restart the active owner service or deploy the candidate merely
 because these isolated tests passed. Unreviewed automatically submitted
 commands remain an explicit production acceptance blocker.
+
+### November 23: actual replayed assistant speech cannot authorize itself
+
+A distinct, deliberately hostile no-action acceptance exercised the exact
+archived **unreleased** default-on speaker-review patch for the *currently
+running older Jetson WebSocket source*, not the unrelated later voice branch.
+The original exact source revision was `f8f89b788f4fdf83d8115c7d4586df880f5427eb`.
+The private candidate source was restored without modification from the
+November 22 SHA-256-verified four-file archive. The patched server SHA-256 is
+`cbcc77fb36ce8cf72cc6442ec0f35d84526aec4868a27b810b2c38bde52bb302`,
+and the patched configuration parser SHA-256 is
+`b3052253b3d3a22f0f3f69bf6cd264768d6dc0bab99fcd94fbb874b1a98c69ba`.
+The production service was **not** restarted or altered.
+
+The fixed input was a **previously genuinely generated** three-point-seven
+second Phonon Easton WAV from an actually completed SWAAG no-tools foreground
+answer, not synthetic bytes or a newly synthesized substitute. Its SHA-256
+is `56e81fe7050641490a634e064705673a1f6c61ee2cf46d6b09f33d8270e7fae7`.
+The script first checked the exact original answer receipt, previously
+successful byte-identical reconnect and persisted normal playback ACK, and
+source and fixture hashes. A separately verified archive contained precisely
+the expected four regular files; no arbitrary tar paths were extracted.
+
+After explicit one-use admission, `scripts/demos/verify_voice_tts_replay_noaction.py`
+started an **isolated authenticated localhost WebSocket**, supplied this actual
+recorded assistant reply as microphone PCM, and made **one real** request to
+resident Thor Whisper large-v3. It recognized all **thirteen original words**.
+The fake legacy mobile client advertised automatic sending and falsely claimed
+trusted owner speaker identity; the candidate kept the speech as one durable
+**unsubmitted manual-review draft** without calling the semantic completion
+classifier. After disconnect and reconnect, the same draft was restored. A
+second fake client with the newer protocol and a forged `commit_turn`
+message could not submit it. There were **zero automatic proposals, zero
+actual SWAAG/tool/TTS/cancellation calls, and zero automatic submissions**.
+All assertions and one-use receipt evidence are stored privately on Jetson
+under
+`/data/var/swaag-benchmarks/owner-serial-000060-20261123/replay-test-01/`.
+The observed run took about three seconds. The original audio source and
+prior SWAAG journal were not replayed to a model or service.
+
+The **versioned** script is usable as a negative acceptance check for exactly
+this source archive. Run without `--run` for a pure local preflight. Running a
+real isolated WebSocket/ASR requires both `--run` and
+`SWAAG_TTS_REPLAY_SPEAKER_NOACTION=1`, a pristine private output directory,
+the exact archived candidate source, the unmodified matching original fixture,
+the original pinned answer receipt and WAV, current broker/service admission,
+and no still-running conflicting test. It writes a unique mode-0600 attempt
+marker before any resident-ASR request and never retries an unknown outcome.
+Fifteen new deterministic tests verify source/WAV/receipt tampering rejection,
+negative receipt semantics, no implicit network attempt, failure retention,
+exclusive evidence creation, and patched non-action operation boundaries.
+
+**Limitation:** This verifies a conservative unverified-speaker hold even for
+replayed assistant audio. It does **not** implement or validate actual owner
+voice recognition, playback device acoustics, immunity to a recorded owner's
+voice, semantic turn completion accuracy, real Android operation, or any
+production deployment. A full owner voice identity and anti-replay mechanism
+would require separate protected enrollment and independent real-device
+adversarial testing before enabling automatic actions. Do not describe this
+as a complete anti-spoofing or production-ready solution.
