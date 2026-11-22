@@ -402,3 +402,40 @@ needs cross-load acceptance with complete authority/history. Genuine owner
 speaker identity, semantic automatic turn completion, physical Android
 mic/playback, live production SWAAG server deployment and actual owner
 commands remain outside these no-action tests.
+
+
+### November 22: reusable, fail-closed verification of the words actually spoken
+
+The earlier real same-turn test saved a byte-exact Phonon reply and independently
+transcribed one output through resident Whisper. That one passing
+thirteen-word sample **does not** establish every reply is correct or that
+a physical phone emitted audible words. A separate later stored three-second
+Phonon output was independently submitted to the resident Whisper verifier
+without calling SWAAG again. All **eleven of its eleven intended words**
+matched, with zero normalized word edits. The one-use private evidence is on
+Jetson in `/data/var/swaag-benchmarks/owner-serial-000058-20261122/retained-phonon-audio-asr-verify.json`.
+
+The versioned `scripts/demos/verify_retained_voice_spoken_content.py` now
+provides a reproducible source-backed acceptance gate. Supply a private
+completed one-use no-action result receipt, its **same** generated Phonon WAV,
+and a **new** private evidence directory. Without `--run`, it validates hashes,
+completed SWAAG response, zero actions, original disconnect/replay/ACK
+receipts and bounded speech audio without contacting a service. Only the
+explicit `--run` flag **and** environment opt-in
+`SWAAG_RETAINED_TTS_ASR_NOACTION=1` permit a single real HTTP request to the
+fixed resident Thor Whisper endpoint; it never calls SWAAG, TTS, shell, a
+third-party provider or the production WebSocket. The unused destination is
+claimed before the request and intentionally cannot be reused after a failed
+or uncertain attempt. Complete expected and observed words are kept in
+mode-0600 private JSON outside Git; ordinary stdout omits them. Differences
+are recorded as nonzero word edit distance and a nonzero exit status, not
+silently accepted.
+
+The script and its deterministic tests require only standard Python and
+pytest. Fake-transport tests validate error handling without a model or
+network request. This test confirms **agreement between a second ASR model
+and one particular generated voice output**, not intelligibility to all
+human listeners, natural prosody, acoustic robustness, owner identity,
+semantic accuracy of the original transcription, or phone playback. A real
+physical-device hearing and microphone acceptance remains mandatory before
+calling the assistant production-ready.
