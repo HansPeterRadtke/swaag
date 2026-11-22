@@ -439,3 +439,52 @@ human listeners, natural prosody, acoustic robustness, owner identity,
 semantic accuracy of the original transcription, or phone playback. A real
 physical-device hearing and microphone acceptance remains mandatory before
 calling the assistant production-ready.
+
+### Live Jetson legacy automatic-send authority is not yet protected — November 22
+
+A fresh **read-only inspection of the actual running Jetson service process**
+identified `/data/src/worktrees/voice-sse-durable-fastpath-20261022/voice_agent_live_runtime/cloudflare_ws_voice_server.py`
+as the loaded script (SHA-256 `561183f64ae76a9aa92e18b8f2a8c1192b7f9fecc7597233bb363bb64e85415f`). Its
+real private `/etc/voice-agent/ws.json` sets `auto_send_default=true`.
+That production source's `VoiceSession.client_state` accepts a legacy client
+claim `build="Voice Agent 1.7.16"` without the newer client commit protocol.
+When a turn-completion classifier returns positive high-confidence semantics,
+the legacy automatic path can call `submit_turn(..., automatic=True)` after
+ASR review, **without a trusted server-side determination of the speaker**.
+Existing private WebSocket bearer authentication is device/application
+access, not verification of the human speaking. Do not interpret the
+built-in test-only `Voice Agent 1.7.16` string as proof that a real authorized
+phone currently uses that path.
+
+The actual **production-source unit tests were rerun independently** in an
+isolated temporary voice configuration, with `submit_turn` mocked and zero
+SWAAG/model/physical-phone calls. Three of three passed: the legacy path
+would attempt automatic submission after positive model-free decisions,
+manual mode does not auto-submit, and a new/unknown client cannot bypass
+the newer commit protocol. Their private source-hash/test receipts are on
+Jetson under
+`/data/var/swaag-benchmarks/owner-serial-000058-20261122/live-release-source-legacy-auto-commit-result.json`.
+This confirms a **source/release safety gap**, not an observed production
+submission or a proof that the live phone uses the older build.
+
+A **different, not-deployed candidate** under
+`/data/src/worktrees/swaag-local-llm-noaction-20261119/voice_agent_live_runtime/`
+contains `require_manual_review_for_unknown_speaker`, including an
+`automatic=True` `submit_turn` guard and a default-on
+`require_verified_speaker_for_auto_send` flag. Five of five separately
+rerun isolated no-action tests passed for spoofed client speaker claims,
+automatic submission, explicit manual send, conservative default settings
+and stale I/O revision fencing. These tests do **not** demonstrate actual
+owner-speaker recognition: they intentionally preserve manual review.
+Their private source-hash/test receipts are in the same November twenty-second
+Jetson evidence directory.
+
+A safe future release must first source-pin and independently test the
+actual intended Jetson service bundle and configuration; preserve the
+older installed service and reversible rollback; positively establish
+manual review and disabled automatic action for any unverified speaker
+including legacy clients; then validate real device microphone, human
+hearing/playback, reconnect, and trusted owner-only enrollment/anti-replay.
+Do not hot-restart the active owner service or deploy the candidate merely
+because these isolated tests passed. Unreviewed automatically submitted
+commands remain an explicit production acceptance blocker.
