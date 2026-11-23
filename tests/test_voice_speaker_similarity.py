@@ -198,3 +198,20 @@ def test_model_modified_after_constructor_rejected_before_optional_imports(tmp_p
         scorer._load_private_cpu_model()
     model.write_bytes(before)
     assert scorer._session is None
+
+
+@pytest.mark.parametrize('recorded_voice_cosine',[0.83,0.90,0.99,1.0])
+def test_high_replayed_voice_similarity_never_becomes_owner_authority(recorded_voice_cosine):
+    # Concrete audio tests show that common benign changes to a previously
+    # recorded genuine owner's audio can retain a high voice match. This
+    # source regression refuses any conversion of a score into action rights.
+    approximate_replay=[recorded_voice_cosine,math.sqrt(max(0,1-recorded_voice_cosine**2))]
+    evidence=compare_voice_embeddings([1.0,0.0],approximate_replay)
+    assert evidence.cosine_similarity==pytest.approx(recorded_voice_cosine,abs=1e-12)
+    assert evidence.identity_claim_is_verified is False
+    assert evidence.live_human_proven is False
+    assert evidence.recording_replay_excluded is False
+    assert evidence.can_auto_submit is False
+    assert evidence.can_execute_tools is False
+    with pytest.raises(TypeError,match='MUST NOT'):
+        if evidence:pass

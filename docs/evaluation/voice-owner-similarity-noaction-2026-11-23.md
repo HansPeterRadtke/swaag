@@ -47,3 +47,30 @@ source module to avoid the unrelated missing Python three-twelve
 `opentelemetry.context` dependency; therefore, no general Python three-twelve
 SWAAG installation claim is made. Again, none of these numbers constitutes
 secure voice authentication or a representative false-accept-rate.
+
+### Actual in-memory replay transformations of genuine owner speech
+
+A fourth private, no-action acceptance used the same versioned speaker model
+and a real owner recording, but **changed the existing recording rather than
+recording any new owner speech**. Three independently written, private WAV
+variants were evaluated: a seventy-percent volume adjustment, telephone-like
+300–3400-hertz band limitation, and additive noise at twenty-five-decibel
+signal-to-noise ratio. The resulting **speaker cosine similarity to the
+original recorded owner voice was 0.999921, 0.828499, and 0.906051**,
+respectively. The observed voice similarity remained high for all three;
+ordinary processing did not make those recordings reliably identifiable as
+replays. No loudspeaker, actual microphone, telephony connection, artificial
+voice clone or third-party impersonation service was used. This test is an
+**offline voice-recording replay-survival demonstration**, not a calibrated
+attack success probability or acoustic live-spoofing test.
+
+The private source inputs, deterministic transformation parameters, file
+hashes, output timings and SHA-pinned versioned voice module are retained on
+Nitro at `.../swaag-owner-recording-replay-perturbation-result.json`; the
+altered owner WAVs are retained **only** under `private-replay-perturbation-audio`
+and must not be included in Git or published. No API, real tool, text answer,
+external message, device speaker or production service was exercised.
+Crucially, **all three outputs still had `can_auto_submit=False`,
+`can_execute_tools=False`, `recording_replay_excluded=False`**, independently
+of their high match. Four additional source tests cover scores from 0.83
+through a perfect 1.0 and enforce this permanent refusal.
