@@ -598,3 +598,86 @@ establishes a trustworthy biometric owner-speaker verifier, semantic-action
 quality, live-phone playback, full cross-load voice latency or resilience
 against an actual owner's recorded voice. A reversible, idle-safe production
 release with actual device acceptance remains separate, unperformed work.
+
+### November 23: one actual independent server process processes real microphone-like PCM
+
+A third separate, **new one-use** Jetson acceptance closed the gap between
+previous in-process real Whisper tests and a server merely starting as a
+private process. `scripts/demos/verify_isolated_voice_real_audio_reconnect.py`
+uses exact SHA-pinned files from the **unreleased patch** for the actual
+Jetson service source, the existing immutable genuine SWAAG/Phonon audio
+and answer receipt, and an isolated private bearer and history directory.
+It sends raw sixteen-kilohertz microphone-like PCM to a **real separately
+running** patched WebSocket server, with automatic sending enabled and a
+forged old-Android owner claim. A fixed localhost-only ASR relay checks that
+the original captured speech occurs in the actual incoming WAV and forwards
+**one** request to the existing resident Thor Whisper endpoint. Every other
+SWAAG/LLM/TTS/ASR/worker/classifier endpoint in the candidate configuration
+remains unreachable at an inert private loopback address.
+
+**Observed true end-to-end result:** Whisper correctly transcribed all
+**thirteen of thirteen** intended words from the original generated
+three-point-seven-second Phonon reply. The one real ASR inference took about
+**two-point-six seconds**; the isolated complete process/voice/reconnect
+acceptance took about **three-point-nine seconds**. Despite auto-send and a
+forged legacy device/owner identity, the patched server emitted an explicit
+`speaker_identity_unverified` review state and stored one unsubmitted draft.
+A second WebSocket connection to the **same still-running child** restored
+that exact speech draft and refused a forged newer-client owner commit.
+There were **zero automatic submissions, zero semantic auto-completion
+calls, zero SWAAG model/tool/TTS calls, and zero external side effects**.
+The isolated child was terminated after the test; the real Jetson systemd
+voice worker retained its original process and source. This distinct stage adds **six** offline tests,
+including single-use ASR-relay failures, audio-source pinning, isolated route
+admission and permanent refusal of an uncertain duplicate test. Full actual
+private evidence is on Jetson under
+`/data/var/swaag-benchmarks/owner-serial-000061-20261123/actual-real-WS-audio-once/`.
+
+### November 23: a new server process restores the real review draft after termination
+
+That one-use real-audio server left a valid atomic `conversations/*.json`
+containing exactly **one** review-only draft, its privately saved captured
+WAV and an orphaned `*.tmp` history file. The test child was terminated
+while a later atomic save was in flight. The fully written authoritative
+history and the temp file both contained **unsubmitted draft** state; no
+finished or submitted action was lost or incorrectly invented. This is a
+single observed process-termination case, not evidence of universal power-
+loss or filesystem fault tolerance.
+
+The versioned independent
+`scripts/demos/verify_isolated_voice_process_restart.py` first reads and
+checks the original private answer receipt, recorded WAV, full durable
+history, event record and any interrupted temp saves **without any network
+requests or writes**. With a distinct explicit opt-in and output folder it
+copies the actual review-only state, captured audio and orphan temporary
+save to a **new private sandbox**, replacing original absolute audio paths
+in that copy only. It then starts a **new real patched server process** with
+all model, Whisper, agent, TTS and worker routes disabled, and authenticates
+a test-only socket. The new process restored the exact **thirteen-word**
+speech draft from durable history without sending it through Whisper or
+SWAAG again. An allegedly owner-verified new client and forged `commit_turn`
+were rejected. Its private result confirms **zero automatic or manual
+commands, zero new ASR/model calls, a correctly restored unsent draft, and
+unchanged original files**. It took about **nine-tenths of a second**. Thirteen
+new negative and recovery regression tests exercise corrupt/committed
+history, unsafe audio paths, malicious temp saves, exclusive attempt
+admission, and preservation after a test failure.
+
+The real restart evidence is on Jetson at
+`/data/var/swaag-benchmarks/owner-serial-000061-20261123/actual-process-restart-once/`.
+The original first-run journal and captured speech remain preserved. All
+new testing was limited to private test-only credentials and isolated
+server processes; the production voice service, physical phone and owner
+recordings were never modified.
+
+These source-backed observations support **in-process voice-to-Whisper,
+real independent subprocess voice-to-Whisper, a safe review decision, socket
+reconnection, and real child-process restart recovery for one fixed no-action
+example**. They do not establish a trusted owner-speaker identity, immunity
+to the owner's recorded voice, microphone hardware input, actual Android
+playback, a fully automated tool-using voice session or a production-safe
+release. A controlled real-device acceptance and separate authority-tested
+reversible deployment remain required. The existing historical multi-step
+SWAAG tool demonstration is still separate and only succeeded after a
+corrective supervisor turn. Do not silently combine these into a claim that
+a fresh voice session executed real tools autonomously.
