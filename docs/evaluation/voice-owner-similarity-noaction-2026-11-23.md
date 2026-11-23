@@ -1,0 +1,49 @@
+# Local SWAAG voice similarity: actual offline owner samples, not owner authentication
+
+November 23, 2026. Current empirical research result: a small **local, CPU-only**, publicly pretrained ONNX speaker-embedding model distinguishes several samples from the owner's own genuine recorded project instructions from a retained synthetic assistant voice and a very small set of different **real human speakers**. Its scores help decide whether a speaker-verification component is worth developing, but **voice similarity is not proof of an actual live person**, of the owner's permission, or of tool authorization. The existing guarded Jetson WebSocket candidate has **not** been deployed, the separate conversation turn classifier is still offline, and no Android microphone or speaker acceptance was performed in these tests.
+
+## Source and model boundaries
+
+The candidate model is [WeSpeaker CAM++ LM for VoxCeleb](https://huggingface.co/Wespeaker/wespeaker-voxceleb-campplus-LM) in ONNX form, **29,292,449 bytes** with SHA-256 `1068e4ac3a76bb9c769e6816ef30bf89363f6e966f1d938210cb8ed4038f8e93`. Its public model card currently displays **Apache-2.0**. The upstream WeSpeaker pretrained-model catalogue also says the underlying VoxCeleb corpus carries **Creative Commons Attribution 4.0** obligations. Check both original model and dataset conditions before any future commercial redistribution; **do not commit or ship the pretrained weight file** as part of SWAAG.
+
+The independent preprocessing reference is `wenet-e2e/wespeaker/wespeaker/bin/infer_onnx.py` (Apache-2.0): 16-kilohertz single-channel signed sixteen-bit PCM, 80 mel filterbanks, a 25-millisecond Hamming window, a ten-millisecond hop, no dither, scale the waveform by 32,768, subtract the feature-wise mean, and call ONNX `feats` to receive `embs`. The reproducible, independently authored core component is `src/swaag/voice_speaker_similarity.py`. It validates the model's SHA and file size, keeps all waveform and 512-dimensional voice embeddings **in process memory only**, rejects out-of-sandbox or malformed audio, strictly limits sample duration and CPU threads, and returns a numerical cosine score. Importantly, `SpeakerComparison` always reports **no live identity proof, no replay exclusion, no automatic submission, and no tool authorization**, regardless of the score. Using its result as a Python truthy permission raises a type error. This is a deliberate permanent authorization boundary for the exploratory module, not a future identity release gate.
+
+The first real model evaluation used three eight-second audio clips from three first-party owner-recorded project messages across August and November and one independently generated prior Phonon Easton English assistant reply. Same-owner pair cosine similarities ranged **0.6782–0.7971**, whereas comparisons to the synthetic voice peaked at **0.0338**. Local CPU ONNX inference per sample ranged roughly **0.10–0.31 seconds after model load**. The model used 80-bin Kaldi fbank per the upstream source. The private source, model, inputs and one-use result are retained on Nitro in `/data/var/swaag-benchmarks/owner-serial-000064-20261123/wespeaker-owner-voice-sample-locked-result.json`. No original audio, raw embeddings or private transcripts were published or uploaded to the pretrained model's provider.
+
+For a separate, fixed **held-out** evaluation, four additional eight-second owner clips from four source recording files not used to choose the initial model were compared with two previously chosen owner reference samples. Three public **real human** voice recordings labeled in the SpeechBrain `tests/samples/ASR` fixture, with two distinct speakers and two utterances from one speaker, served as external negative examples. The owner holdout's **lowest mean cosine was 0.653805**; the public different-human samples' **highest mean cosine was 0.143090**, giving a sample-only separation of **0.510715**. The pair of public utterances from the **same** speaker scored **0.805583** against each other, compared with **-0.060116** across the two public speaker labels. These results are not a preselected acceptance threshold, population false-accept-rate, or biometric security benchmark. Actual per-clip CPU inference in the held-out run took approximately **0.39–0.84 seconds**, with observable host and cold/warm runtime variation.
+
+A third acceptance loaded the **new versioned SWAAG source module itself** in an isolated Python process using the existing local ONNX runtime, not an unrelated scoring script. One owner reference and a genuinely unseen recording scored **0.645900**; two independent real other-human samples scored **0.110698** and **-0.017883**. An exact replay of the reference had **cosine 1.0** as expected, but the returned object **still refused automatic submission and tool use**. In-process embedding generation succeeded on four real WAV files using the SHA-pinned ONNX weights. The private evidence is `.../swaag-speaker-module-actual-private-acceptance.json`. The approximate wall time, including optional imports and model initialization, was **4.5 seconds cold**; after initialization, individual additional comparisons were around **0.10–0.27 seconds** for that run. This is **not** a measurement of inference inside the Jetson production service or on the Blackview.
+
+## Reproducibility and refusal boundaries
+
+Independent test inputs, exact private file SHA-256 values, source script SHA-256 values, runtime version, individual task timing and original first-party recording references live under `/data/var/swaag-benchmarks/owner-serial-000064-20261123` on Nitro; short extracted private owner samples also remain on Jetson under the same wave directory. Public real-human negative WAVs and their source labels live under the Nitro private directory as well. Source weights and audio are not in Git. The source's own deterministic regression tests run with `python -m pytest tests/test_voice_speaker_similarity.py`, including no-authorization replay assertions, invalid input, wrong sample rate, manipulated model hash, symlink escapes, oversized files, missing data and bounded CPU use. The public source supports Python **three-eleven** without requiring optional ONNX/Torch dependencies merely to import it. Actual CPU model scoring requires separately provisioned **torch, torchaudio, NumPy and ONNX Runtime** in an isolated machine environment.
+
+The existing shared Nitro **Python three-twelve** virtual environment still lacks a functioning `opentelemetry.context` import for the entire SWAAG package. A first attempted full-package import reproduced that separate **missing environment dependency** failure *before the real model call or any output was created*. The successful private source acceptance then imported **only the isolated, standalone new module by file path** in the same environment. That successfully validates the voice module and its genuine inference but **does not fix or qualify that Python three-twelve full-package installation**. The previous Python three-eleven `foreground_fast.py` syntax issue was fixed and tested in earlier, separate SWAAG source revisions.
+
+## Non-negotiable remaining security and deployment requirements
+
+A recording of the owner's real voice is intrinsically a **same-speaker** input to this model. Resampling, compression, playback through a loudspeaker or an AI voice clone may also preserve enough identity similarity for a score to be high. Without a separate proven live challenge and server-side anti-replay, device possession/pairing assurance, population calibration across representative genuine and impostor speakers, noisy real microphone acceptance, and real attack-scenario testing, **no similarity score permits actions**. The model and samples must never be silently repurposed to automatically trust a voice message, suppress manual review, release a tool call, or publish a production claim. The live Jetson service remains on the older source and the dedicated turn classifier is unavailable; the guarded test candidate's manual-review safety gate remains the correct separate protection until its release is coordinated and verified.
+
+### Final-source hardening and separate current-code acceptance
+
+The final scored source was hardened further before publication: it rejects
+silent audio **before loading ONNX or heavyweight optional libraries**, checks
+the model bytes **again immediately before inference**, and does **not** change
+Torch's process-global thread count (which could interfere with unrelated
+models sharing the same process). Separate source tests reproduce a replaced
+model and silence without installing the optional CPU inference dependencies.
+An additional genuine private run pinned to the final source revision measured
+**0.670422** for a newly selected genuine owner-recording comparison,
+**0.110698** for a public different-human voice, and cosine **1.0** for a
+replayed identical reference recording. The score result refused automatic
+actions even for the replay. Warm scoring took approximately **0.32–0.45
+seconds** for the two follow-up samples; the cold first sample, including
+optional Python imports and ONNX initialization, took about **1.57 seconds**.
+The source test also independently verified that the ambient Torch global
+thread count was **unchanged**. This exact final-source receipt is retained
+privately as `swaag-final-speaker-module-source-current-acceptance.json` in
+the same Nitro benchmark directory. Inference was done through the standalone
+source module to avoid the unrelated missing Python three-twelve
+`opentelemetry.context` dependency; therefore, no general Python three-twelve
+SWAAG installation claim is made. Again, none of these numbers constitutes
+secure voice authentication or a representative false-accept-rate.
