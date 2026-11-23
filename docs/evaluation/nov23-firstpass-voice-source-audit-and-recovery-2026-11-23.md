@@ -110,3 +110,73 @@ were extended after that first broad run; the final combined postpublication
 suite is the authoritative count for the precise published source revision.
 No full repository suite pass is asserted. No TTS, phone speaker or actual
 incoming Android microphone was part of this developer model/tool attempt.
+
+## November 23: distinct single-model diagnostic of the newly supplied recovery guidance
+
+After the source-level recovery hint and independent verifier were published,
+a separate, genuinely sent but strictly **model-only** one-use diagnostic
+assessed whether the already resident Coder would choose a more useful next
+action when the exact recorded error was made explicit. The published source
+for this test is `scripts/demos/probe_real_file_error_recovery_hint_once.py`
+and its offline refusal/identity tests are in
+`tests/test_probe_real_file_error_recovery_hint_once.py`.
+
+The probe read the original durable one-use SWAAG journal **without changing
+or resuming it** and selected the **second** historical model action request,
+which was exactly between the first and second genuine missing-file tool
+errors. It verified the journal SHA-256
+`c0f70b01637b77467fe988ed00e55215b7573f6ed7635dea41f2f3f166738f01`,
+all four actual original `FilesystemError` results, the original real SWAAG
+JSON action schema, and the original input prompt's explicit history of the
+first real error. It created an entirely **new and different** prompt by
+appending explicit no-action directory-recovery guidance; its new prompt SHA
+is `82e0afbb27be0bc9f95fb785d6b45747ebbf0148ba43372e810cb32e6a2fe62c`,
+which differs from the original prompt SHA
+`812b1af36bcfc5250ba56a574685c9c2e2fc2804c87dbafc9477f3ca9b0a283f`.
+No original private request or uncertain fifth response was resent. Before
+inference it checked the existing local Coder model catalogue for the exact
+previously running model alias. Model output was capped at 768 tokens, one
+model request only, with an exclusive one-use marker preventing retries.
+
+**Observed:** the real resident model returned a valid structured proposal
+for `list_files` with `{"path":"tests"}` in approximately **44.454 seconds**.
+The result's `has_proposed_listing` flag was independently verified from the
+actual model's private JSON response. **No list, file, calculator or external
+action was executed by this diagnostic**, and no historical session,
+production service, other consumer, Android phone or speaker-test input was
+touched. The pinned unique private receipt is on Nitro under
+`/data/var/swaag-benchmarks/owner-serial-000065-20261123/model-only-enhanced-recovery-hint-once/result.json`,
+SHA-256 `52e411f52fd8132337fb632615e7959649dcfaf4755c11b10ae0cd8794bac256`.
+
+This is **positive evidence that the fresh diagnostic instruction led to an
+appropriate next-action proposal in this one context**. It is **not** an
+independent before/after statistical experiment; the model seed, output cap
+and append location also differed. It **does not** prove that the actual
+patched SWAAG runtime would independently perform directory listing, exact
+source reads, calculation and final output successfully under a live first
+user turn; that would require a separate strictly no-action actual runtime
+trial. Moreover, 44 seconds for one model decision is not responsive enough
+for natural spoken turn-taking. The verified live first-pass SWAAG attempt
+remains marked **FAILED**, with no retroactive credit from this separate
+model-only observation.
+
+### Post-publication selection and test-count correction
+
+After the first source increment was pushed and the remote main verified,
+the complete selected **eight-file** runtime/history/tool-control/source
+regression group was executed again against that exact published revision
+`8f954dc1305a100b4291b1af729ac0d94bcec111`. Pytest finished with
+**173 passing tests, zero failed, zero errors and zero skipped**, in about
+**387 seconds**. The immutable private JUnit is at
+`/data/var/swaag-benchmarks/owner-serial-000065-20261123/postpublication-genuine-readonly-recovery-172-junit.xml`,
+SHA-256 `0634d6166f6732d20c22755ad57ada44a97ffa523860ac7bb3063bd43cfbbe2c`.
+The file's **name** contains `172` because the surrounding one-shot shell's
+separate verification script incorrectly expected **172** tests. The actual
+suite discovered **173** tests after additional verifier and revision-pinning
+cases were added. **All 173 pytest tests passed; the wrapper's subsequent
+expected-count assertion failed with exit code 1**. This is a post-test
+bookkeeping assertion, **not** a SWAAG test failure. A separate truthful
+immutable correction receipt is retained as
+`postpublication-pytest-count-wrapper-correction.json`. No model request or
+tool effect was retried, and the full expensive suite was not rerun merely
+to fix the misleading original filename or wrapper count.
