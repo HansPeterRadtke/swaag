@@ -1455,12 +1455,24 @@ class AgentRuntime:
                         break
                     if result is None:
                         all_tool_receipts_succeeded = False
-                    if result is None and self._single_responsibility_mode() and tool_call.tool_name != "load_tools":
+                    if result is None and tool_call.tool_name != "load_tools":
+                        # A genuine tool_error is already durable and visible
+                        # in the next context. Give the normal combined-action
+                        # model the same explicit recovery guidance that the
+                        # single-responsibility model previously received.
+                        # This does NOT reject or cap identical tool calls:
+                        # an external file/service may become available on a
+                        # later attempt, so repetition remains a model decision.
                         recovery_feedback = (
                             f"The concrete invocation of {tool_call.tool_name!r} failed mechanically. "
-                            "The capability remains available. Use the exact tool error already visible in history to "
-                            "correct the arguments, choose another capability if appropriate, or finish from existing evidence. "
-                            "The previous invocation failed with the recorded error. Decide from the current task and state whether retrying the same invocation, changing arguments, or choosing another tool is useful."
+                            "The capability remains available. Inspect the exact tool error already visible in "
+                            "history before selecting the next action. Correct the arguments, choose another "
+                            "available capability, or finish from evidence; do not invent a successful result. "
+                            "An error is not proof that an externally effective action did nothing: never repeat "
+                            "an unverified Send, provider or other side effect merely because an error was returned. "
+                            "If a requested path does not exist, a permitted directory listing may reveal the "
+                            "real source path. Only retry the exact same failed invocation when there is a "
+                            "specific reason to believe its underlying state could have changed."
                         )
                         self.history.record_event(
                             state,

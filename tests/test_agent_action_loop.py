@@ -2827,3 +2827,89 @@ def test_model_action_output_reserve_cannot_grow_to_entire_context(make_config):
         with pytest.raises(ModelClientError, match="output ceiling"):
             runtime._expanded_output_minimum(action_at(2048))
         assert runtime._expanded_output_minimum(action_at(2048, "semantic_summary")) > 2048
+
+
+def test_combined_agent_mode_observes_actual_missing_source_and_recovers_by_listing(
+    make_config, tmp_path
+) -> None:
+    """A real read error reaches the NEXT normal model-action prompt with
+    explicit recovery guidance, while no tool or execution authority expands.
+    """
+    workspace=tmp_path/'read-only-source'
+    source=workspace/'tests'/'current_voice_safety.txt'
+    source.parent.mkdir(parents=True)
+    source.write_text('Voice similarity never authorizes a command.\n')
+    config=make_config(model__max_semantic_responsibilities_per_call=8)
+    config.tools.enabled=['read_file','list_files']
+    config.tools.read_roots=[workspace]
+    observed={}
+
+    def recover_from_error(payload):
+        prompt=str(payload['prompt'])
+        observed['failed_tool_prompt']=prompt
+        assert 'FilesystemError' in prompt
+        assert 'tests/outdated_voice_safety.txt' in prompt
+        assert 'The concrete invocation of' in prompt
+        assert 'a permitted directory listing may reveal' in prompt
+        assert 'never repeat an unverified Send, provider or other side effect' in prompt
+        return _action(tool_calls=[('list_files',{'path':'tests'})],continue_loop=True)
+
+    def follow_real_listing(payload):
+        prompt=str(payload['prompt'])
+        assert 'tests/current_voice_safety.txt' in prompt
+        return _action(tool_calls=[('read_file',{'path':'tests/current_voice_safety.txt'})],continue_loop=True)
+
+    def respond_with_actual_contents(payload):
+        assert 'Voice similarity never authorizes a command' in payload['prompt']
+        return _action(message='Current safety evidence found through a real directory listing.')
+
+    client=FakeModelClient([
+       _action(tool_calls=[('read_file',{'path':'tests/outdated_voice_safety.txt'})],continue_loop=True),
+       recover_from_error, follow_real_listing,respond_with_actual_contents])
+    runtime=AgentRuntime(config,model_client=client)
+    result=runtime.run_turn('Read the old source if present, otherwise locate and inspect the current safety source.')
+    assert result.assistant_text=='Current safety evidence found through a real directory listing.'
+    history=runtime.history.read_history(result.session_id)
+    assert [e.payload['tool_name'] for e in history if e.event_type=='tool_called']==['read_file','list_files','read_file']
+    errors=[e for e in history if e.event_type=='tool_error']
+    assert len(errors)==1 and errors[0].payload['error_type']=='FilesystemError'
+    successes=[e for e in history if e.event_type=='tool_result']
+    assert len(successes)==2
+    assert successes[0].payload['tool_name']=='list_files'
+    assert successes[1].payload['output']['text']==source.read_text()
+    feedback=[e for e in history if e.event_type=='tool_invocation_failed_recoverably']
+    assert len(feedback)==1
+    assert 'directory listing' in feedback[0].payload['reason']
+    assert len(client.requests)==4
+
+
+def test_combined_agent_mode_can_retry_exact_same_read_after_external_file_appears(
+    make_config, tmp_path
+) -> None:
+    """Recovery hints must not become an implicit source/tool repetition ban."""
+    workspace=tmp_path/'workspace'
+    workspace.mkdir()
+    config=make_config(model__max_semantic_responsibilities_per_call=8)
+    config.tools.enabled=['read_file']
+    config.tools.read_roots=[workspace]
+    same={'path':'eventually-created.txt'}
+
+    def external_source_now_exists(payload):
+        assert 'specific reason to believe its underlying state could have changed' in payload['prompt']
+        (workspace/'eventually-created.txt').write_text('This source was created by an external producer.\n')
+        return _action(tool_calls=[('read_file',same)],continue_loop=True)
+
+    def finish(payload):
+        assert 'This source was created by an external producer.' in payload['prompt']
+        return _action(message='Recovered when the same source became available.')
+
+    runtime=AgentRuntime(config,model_client=FakeModelClient([
+       _action(tool_calls=[('read_file',same)],continue_loop=True),
+       external_source_now_exists,finish]))
+    result=runtime.run_turn('Read an eventually available source and report its value.')
+    assert result.assistant_text=='Recovered when the same source became available.'
+    events=runtime.history.read_history(result.session_id)
+    calls=[x for x in events if x.event_type=='tool_called']
+    assert len(calls)==2 and all(x.payload['tool_input']==same for x in calls)
+    assert len([x for x in events if x.event_type=='tool_error'])==1
+    assert len([x for x in events if x.event_type=='tool_result'])==1
