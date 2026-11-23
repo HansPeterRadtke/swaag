@@ -113,3 +113,40 @@ future source-linked, properly limited presentation only under its own
 website-change/publication authority. This SWAAG project provides these
 public-safe source documents and tests only; it has not changed the
 website, contacted a buyer or published marketing claims.
+
+## Fresh limited voice-process evidence, November 23, 2026 — for the same one sales worker
+
+A genuinely recorded **previous SWAAG no-tools model reply**, generated as
+Phonon Easton speech, was fed as microphone-like PCM to a **new real private
+Jetson voice-server process** using the exact unreleased speaker-safety
+candidate. One measured local Whisper inference reproduced all thirteen of
+thirteen words in this sample; the single request took approximately
+**2.57 seconds**. Despite automatic mode and a **forged owner-speaker claim**,
+the server held the speech for review and did not propose or submit a turn.
+The next socket restored that same draft and rejected a forged owner commit.
+The full source-backed isolated WebSocket/ASR/reconnect test took **3.88
+seconds** with **zero new SWAAG model, tool or TTS requests**. This is a
+security-negative test, not a full new conversational tool-using task.
+
+Separately, a **new private voice-server process** started after termination,
+using a fresh, isolated copy of that actually saved draft, original audio
+and an interrupted temp history file. It restored the review state without
+another Whisper request or any automatic action in about **0.86 seconds**.
+The original recorded data were unchanged. The published, reproducible
+source-check scripts and negative tests are at
+`scripts/demos/verify_isolated_voice_real_audio_reconnect.py` and
+`scripts/demos/verify_isolated_voice_process_restart.py`; exact test limits
+and private receipts are described in
+`docs/evaluation/real-phonon-voice-staged-reconnect-2026-11-21.md`.
+
+**Approved limited claim for possible editorial assessment:** a real local
+voice-server test held unverified recorded speech as a durable, reviewable
+draft and restored it across both a socket disconnect and server-process
+restart, without re-executing agent actions. The installed Jetson production
+worker remains the old source, and actual owner identity, voice replay
+resistance, real Android microphone/playback, or automatic voice commands are
+**not yet independently qualified**. Do not imply deployed speaker detection,
+production readiness, successful first-pass agent autonomy, or measured
+reliability across ordinary users. No website or external publishing is
+authorized by this handoff; only the **one** shared sales/website worker may
+assess whether and how to present a source-linked evaluation.
