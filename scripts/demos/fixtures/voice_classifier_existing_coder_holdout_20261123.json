@@ -1,0 +1,198 @@
+{
+  "fixture_version": "predeclared-2026-11-23-wave62-v1",
+  "scope": "model-only voice turn completion and barge-in semantics, no actual spoken audio, no agent actions",
+  "cases": [
+    {
+      "case_id": "independent_20261123_partial_article",
+      "family": "turn_completion",
+      "text": "Please close the",
+      "expected": false
+    },
+    {
+      "case_id": "independent_20261123_partial_whether",
+      "family": "turn_completion",
+      "text": "I wanted to ask whether",
+      "expected": false
+    },
+    {
+      "case_id": "independent_20261123_partial_correction",
+      "family": "turn_completion",
+      "text": "Use folder Gamma, but",
+      "expected": false
+    },
+    {
+      "case_id": "independent_20261123_partial_false_start",
+      "family": "turn_completion",
+      "text": "No, I meant to say",
+      "expected": false
+    },
+    {
+      "case_id": "independent_20261123_partial_after",
+      "family": "turn_completion",
+      "text": "After you've finished",
+      "expected": false
+    },
+    {
+      "case_id": "independent_20261123_partial_condition",
+      "family": "turn_completion",
+      "text": "I will send the email once",
+      "expected": false
+    },
+    {
+      "case_id": "independent_20261123_partial_before",
+      "family": "turn_completion",
+      "text": "Before you answer, please",
+      "expected": false
+    },
+    {
+      "case_id": "independent_20261123_partial_conjunction",
+      "family": "turn_completion",
+      "text": "Read the report and",
+      "expected": false
+    },
+    {
+      "case_id": "independent_20261123_partial_object",
+      "family": "turn_completion",
+      "text": "Show me the",
+      "expected": false
+    },
+    {
+      "case_id": "independent_20261123_partial_modality",
+      "family": "turn_completion",
+      "text": "I think we should probably",
+      "expected": false
+    },
+    {
+      "case_id": "independent_20261123_complete_cancel",
+      "family": "turn_completion",
+      "text": "Cancel the download.",
+      "expected": true
+    },
+    {
+      "case_id": "independent_20261123_complete_stop",
+      "family": "turn_completion",
+      "text": "Stop. Do not send anything.",
+      "expected": true
+    },
+    {
+      "case_id": "independent_20261123_complete_feedback",
+      "family": "turn_completion",
+      "text": "That result is incorrect.",
+      "expected": true
+    },
+    {
+      "case_id": "independent_20261123_complete_correction",
+      "family": "turn_completion",
+      "text": "No, use Beta rather than Alpha.",
+      "expected": true
+    },
+    {
+      "case_id": "independent_20261123_complete_question",
+      "family": "turn_completion",
+      "text": "Could you summarize the second paragraph?",
+      "expected": true
+    },
+    {
+      "case_id": "independent_20261123_complete_statement",
+      "family": "turn_completion",
+      "text": "The connection is still slow.",
+      "expected": true
+    },
+    {
+      "case_id": "independent_20261123_complete_choice",
+      "family": "turn_completion",
+      "text": "I prefer the older version.",
+      "expected": true
+    },
+    {
+      "case_id": "independent_20261123_complete_gratitude",
+      "family": "turn_completion",
+      "text": "Thank you, that's enough.",
+      "expected": true
+    },
+    {
+      "case_id": "independent_20261123_complete_german_separable",
+      "family": "turn_completion",
+      "text": "Mach die Tür zu.",
+      "expected": true
+    },
+    {
+      "case_id": "independent_20261123_complete_german_correction",
+      "family": "turn_completion",
+      "text": "Das war nicht meine Frage.",
+      "expected": true
+    },
+    {
+      "case_id": "independent_20261123_backchannel_yeah",
+      "family": "interruption",
+      "text": "yeah",
+      "expected": false,
+      "assistant_text": "The current explanation is continuing."
+    },
+    {
+      "case_id": "independent_20261123_backchannel_mhm",
+      "family": "interruption",
+      "text": "mhm",
+      "expected": false,
+      "assistant_text": "The current explanation is continuing."
+    },
+    {
+      "case_id": "independent_20261123_backchannel_right",
+      "family": "interruption",
+      "text": "right",
+      "expected": false,
+      "assistant_text": "The current explanation is continuing."
+    },
+    {
+      "case_id": "independent_20261123_backchannel_okay",
+      "family": "interruption",
+      "text": "okay",
+      "expected": false,
+      "assistant_text": "The current explanation is continuing."
+    },
+    {
+      "case_id": "independent_20261123_backchannel_got_it",
+      "family": "interruption",
+      "text": "got it",
+      "expected": false,
+      "assistant_text": "The current explanation is continuing."
+    },
+    {
+      "case_id": "independent_20261123_interrupt_stop",
+      "family": "interruption",
+      "text": "Wait. Stop reading.",
+      "expected": true,
+      "assistant_text": "The current explanation is continuing."
+    },
+    {
+      "case_id": "independent_20261123_interrupt_correction",
+      "family": "interruption",
+      "text": "No, that's not what I asked.",
+      "expected": true,
+      "assistant_text": "The current explanation is continuing."
+    },
+    {
+      "case_id": "independent_20261123_interrupt_change",
+      "family": "interruption",
+      "text": "Can I correct that?",
+      "expected": true,
+      "assistant_text": "The current explanation is continuing."
+    },
+    {
+      "case_id": "independent_20261123_interrupt_pause",
+      "family": "interruption",
+      "text": "Please pause the explanation.",
+      "expected": true,
+      "assistant_text": "The current explanation is continuing."
+    },
+    {
+      "case_id": "independent_20261123_interrupt_german_question",
+      "family": "interruption",
+      "text": "Warum antwortest du nicht?",
+      "expected": true,
+      "assistant_text": "The current explanation is continuing."
+    }
+  ],
+  "not_run_on_coder_before_definition": true,
+  "annotation_contract": "complete utterance/turn vs fragment, take floor vs backchannel; designed prior to classifier inference"
+}
