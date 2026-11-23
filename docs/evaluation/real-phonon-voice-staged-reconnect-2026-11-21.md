@@ -548,3 +548,53 @@ production deployment. A full owner voice identity and anti-replay mechanism
 would require separate protected enrollment and independent real-device
 adversarial testing before enabling automatic actions. Do not describe this
 as a complete anti-spoofing or production-ready solution.
+
+### November 23: independent actual-process startup of the same patched release candidate
+
+The same exact unreleased patch was also staged as a separate, seven-module
+source-pinned private release candidate, with unchanged dependencies copied
+from the actual installed Jetson source. A new versioned tester,
+`scripts/demos/verify_isolated_voice_release_server.py`, validates all seven
+module hashes and the exact original production-config hash before allowing
+any process or network operation. It creates a **distinct ephemeral
+localhost-only WebSocket process** from the candidate source and a one-use
+configuration. Its authentication token is a harmless fake, its event/history
+storage is inside its private evidence folder, and **every** ASR, SWAAG,
+LLM, Phonon, worker-events and turn-classifier network route is changed to an
+unavailable private loopback destination. No actual speech, model or tool
+request can leave this test instance. The original production configuration,
+service and user phone are never modified.
+
+The first attempted private process startup **failed** before opening a
+socket because the test launcher incorrectly resolved its virtualenv's
+symlinked Python executable to the system interpreter, where `websockets`
+was not installed. The original one-use failure receipt and error log are
+retained under `private-process-smoke-01`; **that attempt did not pass**. A
+regression was added to preserve the interpreter's original virtualenv
+entrypoint, and all thirteen focused admission tests passed. Only then was
+an entirely new exclusive `private-process-smoke-02` test admitted. It
+**passed**: actual candidate child bound its own localhost socket, HTTP
+health responded live, an authenticated WebSocket returned its real hello
+with `unverified_speaker_requires_review=true` while `auto_send_default=true`,
+empty durable history remained empty, and an unauthenticated WebSocket was
+rejected with HTTP 401. Its process was terminated and reaped by its owning
+test harness, not by any systemd operation; the production server continued
+running with its original unchanged process identity.
+
+The observed second private-process test took about **seven-tenths of a
+second** and retains source/config hashes and independent JSON/log proof on
+Jetson under
+`/data/var/swaag-benchmarks/owner-serial-000060-20261123/private-process-smoke-02/`.
+The test is reproducible only with the exact private candidate source,
+original production template, the opt-in `SWAAG_PRIVATE_RELEASE_SMOKE_NOACTION=1`
+and `--run`, a free private output destination and no competing instance.
+Its default mode is a no-write, no-network source preflight. It never
+updates or restarts `jetson-voice-ws.service` and cannot be treated as a
+production deployment or real Android/owner-speaker acceptance.
+
+Both this independent process smoke and the separate real replayed-TTS ASR
+experiment support a conservative fail-closed candidate release. Neither
+establishes a trustworthy biometric owner-speaker verifier, semantic-action
+quality, live-phone playback, full cross-load voice latency or resilience
+against an actual owner's recorded voice. A reversible, idle-safe production
+release with actual device acceptance remains separate, unperformed work.
