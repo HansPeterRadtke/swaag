@@ -84,3 +84,38 @@ unavailable; physical Android microphone, audible playback, speaker
 liveness, and automatic command authorization remain unverified. The
 real fresh-synthesis stop path is distinct from the retained-WAV delivery
 test and needs its own no-action regression.
+
+## Follow-up: stop while the media response is still arriving
+
+A fourth distinct private process exercised the actual candidate
+`VoiceSession.answer` and `stream_tts_reply` methods. The loopback test
+reply endpoint supplied the original checksum-verified public-test Coder
+response as a fixture. The local media endpoint sent only the first
+frame of the original real W99 Phonon framed output, held the rest until
+after an acknowledged explicit stop and a new WebSocket connection, and
+then finished returning the saved frame sequence. This was a controlled
+transport test with **retained genuine model output**, not new model
+inference or fresh TTS synthesis.
+
+The original stream had sent 1,920 PCM bytes. The replacement socket
+observed the stop in durable history while the assistant audio was
+still being generated/saved. After the held bytes were released,
+the server saved the complete original 174,080 PCM bytes (the output
+WAV hash matched the original W99 WAV exactly), completed the answer,
+preserved `audio_stopped=true` and `audio_completed=false`, and did not
+send a new automatic audio stream. Exactly one private reply-fixture
+request and one private media-fixture request were observed, with no
+upstream model, phone or agent calls. The actual scenario took 2.330
+seconds; only the owned child and loopback fixture were stopped.
+
+The source is `scripts/demos/verify_private_voice_stop_pending_stream.py`.
+The separate no-inference verifier
+`scripts/demos/verify_private_voice_stop_pending_stream_evidence.py`
+independently returned `independently_verified_pending_transport_stop`.
+The original attempt, result (SHA-256
+`3d8004ab9b4ec810f7fdb84b0be0c7532036a5ac29bdb3982197b5e7021a173f`),
+events, durable history and exact final WAV are in the Jetson private
+`stop-during-held-media` subdirectory. This closes the pending-media
+transport regression for the exact private candidate. It still does
+not establish fresh synthesis interruption under all model/load
+conditions or production/physical phone release quality.
