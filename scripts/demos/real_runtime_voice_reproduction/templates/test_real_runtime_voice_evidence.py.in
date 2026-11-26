@@ -1,0 +1,152 @@
+#!/usr/bin/env python3
+"""Adversarial offline checks over an actually completed W111 evidence directory.
+
+Runs the full independent audit once, then alters only in-memory evidence reads.
+Each corruption must be rejected. No original artifact is changed and no service
+request or inference is made. These tests validate the evidence verifier; they do
+not stand in for a live voice run.
+"""
+from __future__ import annotations
+
+import argparse
+import datetime
+import hashlib
+import importlib.util
+import json
+from pathlib import Path
+import unittest.mock
+
+
+def json_edit(raw, edit):
+    value = json.loads(raw)
+    edit(value)
+    return json.dumps(value, ensure_ascii=False).encode()
+
+
+def jsonl_edit(raw, edit):
+    rows = [json.loads(x) for x in raw.splitlines() if x.strip()]
+    edit(rows)
+    return ("\n".join(json.dumps(x, ensure_ascii=False) for x in rows) + "\n").encode()
+
+
+def set_field(field, value):
+    return lambda obj: obj.__setitem__(field, value)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    for name in ("evidence", "runner", "worker", "voice-source", "swaag-source", "devtests-repo", "verifier"):
+        parser.add_argument("--" + name, type=Path, required=True)
+    parser.add_argument("--expected-devtests-revision", required=True)
+    parser.add_argument("--conversation", required=True)
+    args = parser.parse_args()
+    spec = importlib.util.spec_from_file_location("w111_independent_verifier", args.verifier)
+    verifier = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(verifier)
+    parameters = (args.evidence, args.runner, args.worker, args.voice_source,
+                  args.swaag_source, args.devtests_repo, args.expected_devtests_revision, args.conversation)
+    try:
+        baseline = verifier.verify(*parameters)
+    except Exception as exc:
+        print(json.dumps({"status": "tests_not_started_baseline_failed",
+                          "error_type": type(exc).__name__, "error": str(exc)}, indent=2))
+        return 2
+    history = json.loads((args.evidence / "history-before-replay.json").read_text())
+    history_path = next(iter(history))
+
+    def foreign_rpc_control(rows):
+        row = next(x for x in rows if x.get("direction") == "response"
+                   and x.get("payload", {}).get("event") == "accepted")
+        row["payload"]["control_id"] = "foreign-user-control"
+
+    def foreign_playback_ack(rows):
+        row = next(x for x in rows if x.get("command", {}).get("type") == "playback_completed")
+        row["command"]["stream_id"] = "foreign-playback-stream"
+
+    def changed_replay_reply(rows):
+        row = next(x for x in rows if x.get("event") == "completed")
+        row["result"]["answer"] = "This was not the committed reply."
+
+    def changed_gateway_finish(raw):
+        rows = verifier.sse_events(raw)
+        rows[-1]["result"] = "A different response."
+        return ("\n\n".join("data: " + json.dumps(x) for x in rows) + "\n\n").encode()
+
+    def damaged_pcm(raw):
+        assert raw
+        return bytes([raw[0] ^ 1]) + raw[1:]
+
+    def damaged_history(raw):
+        return jsonl_edit(raw, lambda rows: rows[0]["payload"].__setitem__("injected_evidence", "tampered"))
+
+    cases = [
+        ("model_data_after_terminal", "model-response.json",
+         lambda raw: raw + b'\ndata: {"content":"extra","stop":false}\n',
+         "model data follows terminal"),
+        ("different_gateway_final_reply", "gateway-response.sse", changed_gateway_finish,
+         "SSE not bound"),
+        ("foreign_authoritative_control", "rpc-wire.jsonl",
+         lambda raw: jsonl_edit(raw, foreign_rpc_control), "RPC identity changed"),
+        ("different_actual_input_audio", "actual-asr-input.wav", damaged_pcm, "actual ASR audio differs"),
+        ("different_recovered_audio", "recovered-media.pcm", damaged_pcm, "recovered PCM is not original"),
+        ("wrong_playback_ack_stream", "ws-commands.jsonl",
+         lambda raw: jsonl_edit(raw, foreign_playback_ack), "wrong playback ACK"),
+        ("canonical_history_tampered", history_path, damaged_history, "retained history differs"),
+        ("fresh_process_replay_changed", "restart-replay-response.json",
+         lambda raw: json_edit(raw, changed_replay_reply), "replay changed committed answer"),
+        ("tools_enabled_in_actual_runtime", "agent-initial-ready-effective.json",
+         lambda raw: json_edit(raw, set_field("actual_enabled_tools", ["shell"])), "effective tools exposed"),
+        ("approval_after_model_work", "manual-approval.json",
+         lambda raw: json_edit(raw, set_field("monotonic", 1.0e20)), "upstream chronology not approval-gated"),
+        ("controlled_failure_not_observed", "cancellation-submit.json",
+         lambda raw: json_edit(raw, set_field("http_status", 200)), "controlled cancellation failure not detected"),
+        ("truncated_tts_stream", "tts-framed.bin", lambda raw: raw[:-4], "PCM stream has no terminal frame"),
+        ("wrong_imported_runtime_source", "agent-initial-ready-effective.json",
+         lambda raw: json_edit(raw, set_field("runtime_source_path", "/tmp/unrelated_runtime.py")),
+         "actual imported SWAAG module differs"),
+        ("missing_cancellation_rpc", "rpc-wire.jsonl",
+         lambda raw: jsonl_edit(raw, lambda rows: rows.__setitem__(slice(None),
+             [x for x in rows if not (x.get("direction") == "request"
+               and x.get("payload", {}).get("op") == "orchestrator.interrupt")])),
+         "actual cancellation RPC missing"),
+    ]
+    outcomes = []
+    original_evidence = verifier.Evidence
+    source_counts = (baseline["voice_source_files"], baseline["swaag_source_files"])
+    for name, relative, mutation, expected_error in cases:
+        class CorruptedEvidence(original_evidence):
+            def read(self, requested):
+                raw = super().read(requested)
+                if str(requested) == str(relative):
+                    raw = mutation(raw)
+                    self.digests[str(requested)] = verifier.sha(raw)
+                return raw
+        try:
+            with unittest.mock.patch.object(verifier, "Evidence", CorruptedEvidence), \
+                 unittest.mock.patch.object(verifier, "audit_sources", return_value=source_counts):
+                verifier.verify(*parameters)
+        except (ValueError, KeyError, TypeError, OSError) as exc:
+            if expected_error not in str(exc):
+                outcomes.append({"case": name, "status": "wrong_rejection",
+                                 "expected": expected_error, "observed": str(exc)})
+            else:
+                outcomes.append({"case": name, "status": "rejected", "reason": str(exc)})
+        else:
+            outcomes.append({"case": name, "status": "incorrectly_accepted"})
+    success = all(row["status"] == "rejected" for row in outcomes)
+    report = {
+        "status": "all_corruptions_rejected" if success else "corruption_check_failed",
+        "utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "evidence": str(args.evidence), "verifier_sha256": hashlib.sha256(args.verifier.read_bytes()).hexdigest(),
+        "test_source_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "baseline_status": baseline["status"],
+        "baseline_source_revision": {"swaag": baseline["swaag_revision"], "devtests": baseline["devtests_revision"]},
+        "cases": outcomes,
+        "scope": "Original artifacts are preserved. Source audit ran in full on the real baseline; only unchanged source audit is reused for in-memory corruption cases. These are offline verifier tests, not additional live runs.",
+    }
+    print(json.dumps(report, indent=2, ensure_ascii=False))
+    return 0 if success else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

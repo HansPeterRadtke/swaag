@@ -1,0 +1,641 @@
+#!/usr/bin/env python3
+"""Independent offline audit of W111 actual-runtime recorded voice evidence.
+
+Reads evidence and local Git objects only. Does not import SWAAG or the runner,
+connect to a service, invoke inference, alter history, or infer physical playback.
+A passing audit binds measured artifacts; it is not a universal security proof.
+"""
+from __future__ import annotations
+
+import argparse
+import collections
+import datetime
+import hashlib
+import io
+import json
+import math
+from pathlib import Path
+import re
+import subprocess
+import sqlite3
+import urllib.parse
+import wave
+
+SWAAG_REV = "06fcf206f2b448cb8f1f518377e38105b50cbd60"
+DEVTESTS_REV = "af9d68a576e2eb72e215caed1190756d57c0d009"
+FIXTURE_SHA = "60fa1df444a16cdf558ca052cf087f49b9ed7ed238bf68d0b24e7906aaac71c0"
+CONV = "w111-real-swaag-confirmed-public-repeat"
+MODEL = "qwen38-27b-q8-full-262k"
+MAX_FILE = 32_000_000
+
+
+def require(condition, message):
+    if not condition:
+        raise ValueError(message)
+
+
+def sha(raw):
+    return hashlib.sha256(raw).hexdigest()
+
+
+def canonical(value):
+    return json.dumps(value, sort_keys=True, ensure_ascii=True,
+                      separators=(",", ":")).encode()
+
+
+def one(values, message):
+    values = list(values)
+    require(len(values) == 1, message)
+    return values[0]
+
+
+def inside(root, path):
+    try:
+        Path(path).resolve().relative_to(root.resolve())
+        return True
+    except (ValueError, OSError):
+        return False
+
+
+class Evidence:
+    def __init__(self, root):
+        self.root = root.absolute()
+        require(self.root.is_dir() and not self.root.is_symlink()
+                and self.root.resolve() == self.root, "invalid evidence root")
+        self.digests = {}
+
+    def read(self, relative):
+        path = self.root / relative
+        require(not Path(relative).is_absolute() and ".." not in Path(relative).parts,
+                "external evidence reference")
+        require(inside(self.root, path) and path.is_file(), "missing evidence: " + str(relative))
+        current = path
+        while current != self.root:
+            require(not current.is_symlink(), "symlink evidence: " + str(relative))
+            current = current.parent
+        require(path.stat().st_size <= MAX_FILE, "oversized evidence: " + str(relative))
+        raw = path.read_bytes()
+        self.digests[str(relative)] = sha(raw)
+        return raw
+
+    def obj(self, relative):
+        return json.loads(self.read(relative))
+
+    def lines(self, relative):
+        return [json.loads(line) for line in self.read(relative).splitlines() if line.strip()]
+
+
+def wav_pcm(raw):
+    with wave.open(io.BytesIO(raw), "rb") as stream:
+        require((stream.getnchannels(), stream.getsampwidth(), stream.getframerate()) == (1, 2, 16000),
+                "wrong WAV encoding")
+        pcm = stream.readframes(stream.getnframes())
+    require(bool(pcm) and len(pcm) % 2 == 0, "empty or truncated WAV")
+    return pcm
+
+
+def framed_pcm(raw):
+    position = 0
+    pieces = []
+    while position + 4 <= len(raw):
+        size = int.from_bytes(raw[position:position + 4], "big")
+        position += 4
+        if size == 0:
+            require(position == len(raw) and pieces, "bad PCM terminal frame")
+            return b"".join(pieces)
+        require(0 < size <= 1_000_000 and size % 2 == 0 and position + size <= len(raw),
+                "bad PCM frame")
+        pieces.append(raw[position:position + size])
+        position += size
+    raise ValueError("PCM stream has no terminal frame")
+
+
+def sse_events(raw):
+    events = []
+    for line in raw.decode("utf-8").splitlines():
+        if not line.strip() or line.startswith(":"):
+            continue
+        require(line.startswith("data:"), "unexpected SSE transport line")
+        payload = line[5:].strip()
+        require(payload != "[DONE]", "unexpected gateway sentinel")
+        events.append(json.loads(payload))
+    require(events, "empty SSE stream")
+    return events
+
+
+def model_stream(raw):
+    """Decode the actual llama.cpp SSE stream without using its client parser."""
+    parts = []
+    terminal = None
+    done = False
+    rows = []
+    for line in raw.decode("utf-8").splitlines():
+        text = line.strip()
+        if not text or text.startswith(":"):
+            continue
+        if text.startswith("data:"):
+            text = text[5:].strip()
+        if text == "[DONE]":
+            require(terminal is not None and not done, "model sentinel precedes completion or repeats")
+            done = True
+            continue
+        require(terminal is None and not done, "model data follows terminal completion")
+        row = json.loads(text)
+        require(isinstance(row, dict) and not row.get("error"), "model transport error")
+        rows.append(row)
+        piece = row.get("content", "")
+        require(isinstance(piece, str), "non-text llama completion")
+        parts.append(piece)
+        if row.get("stop") is True:
+            terminal = row
+    require(rows and terminal is not None, "model stream not terminal")
+    text = "".join(parts)
+    require(text.strip(), "empty completed model text")
+    return text, terminal, rows
+
+
+def audit_history(rows):
+    require(rows, "empty canonical history")
+    previous = None
+    session = rows[0].get("session_id")
+    identities = set()
+    for sequence, event in enumerate(rows, 1):
+        require(event.get("sequence") == sequence and event.get("session_id") == session,
+                "history sequence or session changed")
+        require(event.get("version") == 1 and event.get("prev_hash") == previous,
+                "history chain linkage changed")
+        require(isinstance(event.get("payload"), dict) and isinstance(event.get("metadata"), dict),
+                "invalid history payload")
+        require(event.get("id") not in identities and isinstance(event.get("id"), str),
+                "duplicate history event identity")
+        identities.add(event["id"])
+        body = dict(event)
+        observed = body.pop("hash", None)
+        require(observed == sha(canonical(body)), "history event hash mismatch")
+        previous = observed
+    return session
+
+
+def audit_ws(events, commands, turn, transcript, reply, operation):
+    def matches(kind, **fields):
+        return [(i, row) for i, row in enumerate(events)
+                if row.get("type") == kind and all(row.get(k) == v for k, v in fields.items())]
+    hellos = matches("hello")
+    require([x.get("connection_generation") for _, x in hellos] == [1, 2, 3], "wrong socket generations")
+    require(all(x.get("unverified_speaker_requires_review") is True for _, x in hellos),
+            "speaker review guard missing")
+    require(not matches("error") and not matches("turn_proposal"), "unexpected server error/proposal")
+    finals = matches("asr", event="final")
+    require(len(finals) == 3 and all(x.get("turn_id") == turn and x.get("text") == transcript
+            and x.get("auto_send") is False for _, x in finals)
+            and all(x.get("restored") is True for _, x in finals[1:]), "ASR replay differs")
+    submitted_i, submitted = one(matches("turn", event="submitted"), "duplicate/missing manual submission")
+    require(submitted.get("turn_id") == turn and submitted.get("text") == transcript
+            and submitted.get("automatic") is False, "wrong manual submission")
+    reviews = matches("state", state="awaiting_send", reason="speaker_identity_unverified")
+    require(len(reviews) == 3 and all(x.get("turn_id") == turn for _, x in reviews),
+            "forged owner/commit review absent")
+    starts, ends = matches("audio", event="start"), matches("audio", event="end")
+    require(len(starts) == 2 and len(ends) == 1, "not interrupted then resumed audio")
+    first_i, first = starts[0]
+    resumed_i, resumed = starts[1]
+    end_i, end = ends[0]
+    require(hellos[0][0] < finals[0][0] < reviews[0][0] < hellos[1][0] < finals[1][0]
+            < reviews[1][0] < reviews[2][0] < finals[2][0] < submitted_i < first_i
+            < hellos[2][0] < resumed_i < end_i, "voice event causality changed")
+    require(first.get("stream_id") != resumed.get("stream_id") and resumed.get("resumed") is True
+            and resumed.get("stream_id") == end.get("stream_id")
+            and resumed.get("generation") == end.get("generation")
+            and all(x.get("turn_id") == turn for x in (first, resumed, end)), "audio stream identity changed")
+    histories = matches("history")
+    require(len(histories) == 5 and histories[0][1].get("turns") == [], "initial/terminal histories missing")
+    for _, history in histories[1:3]:
+        row = one(history["turns"], "duplicate draft")
+        require(row.get("turn_id") == turn and row.get("status") == "draft"
+                and not row.get("assistant") and row.get("recognized_text") == transcript,
+                "draft changed before approval")
+    row = one(histories[-1][1]["turns"], "duplicate completed history")
+    require(row.get("assistant") == reply and row.get("turn_id") == turn
+            and row.get("audio_completed") is True and row.get("status") == "completed", "playback not acknowledged")
+    actual_commands = [x["command"] for x in commands]
+    command_submit = one([x for x in actual_commands if x.get("type") == "submit"], "manual command repeated")
+    require(command_submit.get("turn_id") == turn and command_submit.get("text") == transcript,
+            "client submitted other text")
+    owner = one([x for x in actual_commands if x.get("speaker_identity") == "owner"], "forged owner challenge absent")
+    require(owner.get("speaker_verified") is True and owner.get("auto_send") is True, "weak owner challenge")
+    commit = one([x for x in actual_commands if x.get("type") == "commit_turn"], "forged commit absent")
+    require(commit.get("proposal_id") == "forged-automatic-proposal", "wrong forged challenge")
+    ack = one([x for x in actual_commands if x.get("type") == "playback_completed"], "playback ACK repeated")
+    require(ack.get("turn_id") == turn and ack.get("stream_id") == resumed.get("stream_id")
+            and ack.get("generation") == resumed.get("generation"), "wrong playback ACK")
+    require([x["monotonic"] for x in commands] == sorted(x["monotonic"] for x in commands),
+            "client command chronology changed")
+    return resumed["stream_id"]
+
+
+def git_blob(repo, revision, path):
+    return subprocess.check_output(["git", "-C", str(repo), "show", revision + ":" + path], timeout=10)
+
+
+def audit_sources(attempt, runner, worker, voice_source, swaag_source, devtests_repo, devtests_revision):
+    require(attempt.get("swaag_revision") == SWAAG_REV and attempt.get("devtests_revision") == devtests_revision,
+            "wrong declared source revision")
+    require(sha(runner.read_bytes()) == attempt.get("script_sha256")
+            and sha(worker.read_bytes()) == attempt.get("worker_sha256"), "as-run harness changed")
+    pins = attempt["source_pins"]
+    require(pins and all(isinstance(k, str) and not Path(k).is_absolute() and ".." not in Path(k).parts for k in pins),
+            "invalid voice source manifest")
+    source_paths = list(voice_source.rglob("*.py"))
+    require(all(p.is_file() and not p.is_symlink() and inside(voice_source, p) for p in source_paths),
+            "invalid exported voice source path")
+    actual = {str(p.relative_to(voice_source)): sha(p.read_bytes()) for p in source_paths}
+    expected_voice = subprocess.check_output(
+        ["git", "-C", str(devtests_repo), "ls-tree", "-r", "--name-only", devtests_revision,
+         "voice_agent_live_runtime"], text=True, timeout=10).splitlines()
+    require(set(actual) == {x.removeprefix("voice_agent_live_runtime/") for x in expected_voice if x.endswith(".py")},
+            "voice export omits or adds Python source files")
+    require(actual == pins, "exported voice source changed")
+    for relative, digest in pins.items():
+        require(sha(git_blob(devtests_repo, devtests_revision, "voice_agent_live_runtime/" + relative)) == digest,
+                "voice export differs from canonical Git blob: " + relative)
+    names = subprocess.check_output(
+        ["git", "-C", str(swaag_source), "ls-tree", "-r", "--name-only", SWAAG_REV, "src/swaag"],
+        text=True, timeout=10).splitlines()
+    require(names, "SWAAG source tree missing")
+    for relative in names:
+        p = swaag_source / relative
+        require(p.is_file() and not p.is_symlink()
+                and p.read_bytes() == git_blob(swaag_source, SWAAG_REV, relative),
+                "actual SWAAG source changed: " + relative)
+    return len(pins), len(names)
+
+
+def audit_effective(e, phase, attempt, swaag_source):
+    value = e.obj("agent-" + phase + "-ready-effective.json")
+    ready = e.obj("agent-" + phase + "-ready.json")
+    lifecycle = e.obj("agent-" + phase + "-ready-lifecycle.json")
+    require(value.get("source_revision") == SWAAG_REV and value.get("worker_sha256") == attempt["worker_sha256"],
+            "worker source provenance changed")
+    require(value.get("config_sha256") == sha(e.read("agent-config.toml")), "effective config differs")
+    for module in ("runtime", "communication"):
+        require(Path(value[module + "_source_path"]).resolve() == (swaag_source / "src" / "swaag" / (module + ".py")).resolve(),
+                "actual imported SWAAG module differs from audited source")
+    for field in ("actual_enabled_tools", "actual_external_tool_specs", "communication_enabled_tools",
+                  "external_mcp_servers"):
+        require(value.get(field) == [], "effective tools exposed: " + field)
+    for field in ("preempt_shared_model", "mcp_enabled", "a2a_push_enabled", "embedding_index_enabled",
+                  "perception_enabled", "open_webui_artifacts_enabled", "completion_evaluation_enabled",
+                  "background_serve_tcp_loops_started", "python_guard_is_os_sandbox"):
+        require(value.get(field) is False, "effective unsafe/false scope: " + field)
+    require(value.get("idle_work_mode") == "finish_only" and not value.get("model_routes"), "background work admitted")
+    tool = value["tools"]
+    require(tool.get("enabled") == [] and tool.get("staged_discovery") is False
+            and tool.get("allow_stateful_tools") is False and tool.get("allow_side_effect_tools") is False,
+            "tool permission boundary changed")
+    require(all(inside(e.root, x) for x in [value["sessions"]["root"], value["agent_data_root"],
+                value["logging_file"], *tool["read_roots"]]), "configured state outside test")
+    model = value["model"]
+    address = urllib.parse.urlsplit(model["base_url"])
+    require(address.scheme == "http" and address.hostname == "127.0.0.1" and address.port
+            and model["completion_endpoint"] == "/completion" and model["cache_enabled"] is False
+            and model["max_retries"] == 0 and model["api_key_env"] == ""
+            and model["profile_name"] == MODEL and model["model_identity"] == MODEL,
+            "wrong actual model/no-cache configuration")
+    require(ready.get("host") == "127.0.0.1" and ready.get("tools_enabled") == []
+            and ready.get("actual_handler") == "swaag.communication.CommunicationService.handle_client",
+            "not actual isolated communication handler")
+    require(lifecycle.get("pid") == ready.get("pid") and lifecycle.get("status") == "stopped"
+            and lifecycle.get("listener_closed") is True and lifecycle.get("service_close_called") is True
+            and lifecycle.get("boundary_violations") == [], "worker not cleanly closed")
+    return value, ready, lifecycle
+
+
+def audit_operation_store(e, operation, canceled_id, transcript, session, reply, observed_status):
+    relative = "sessions/orchestrator_operations.sqlite3"
+    raw = e.read(relative)
+    path = e.root / relative
+    require(not Path(str(path) + "-wal").exists(), "operation store has uncheckpointed WAL")
+    connection = sqlite3.connect(path.as_uri() + "?mode=ro&immutable=1", uri=True)
+    try:
+        connection.execute("PRAGMA query_only=ON")
+        connection.execute("PRAGMA trusted_schema=OFF")
+        connection.row_factory = sqlite3.Row
+        rows = [dict(row) for row in connection.execute("SELECT * FROM operations")]
+    finally:
+        connection.close()
+    require(raw == e.read(relative), "operation store changed during offline audit")
+    require({row["operation_id"] for row in rows} == {operation, canceled_id} and len(rows) == 2,
+            "operation store contains missing/extra operations")
+    completed = one([row for row in rows if row["operation_id"] == operation], "completed operation missing")
+    canceled = one([row for row in rows if row["operation_id"] == canceled_id], "canceled tombstone missing")
+    require(completed["status"] == "completed" and completed["cancel_requested"] == 0
+            and completed["message"] == transcript and completed["content_sha256"] == sha(transcript.encode())
+            and completed["session_id"] == session and json.loads(completed["result_json"]) == observed_status["result"]
+            and json.loads(completed["result_json"])["answer"] == reply,
+            "persisted completed operation differs from wire/history")
+    require(canceled["status"] == "canceled" and canceled["cancel_requested"] == 1
+            and canceled["message"] == canceled["content_sha256"] == canceled["session_id"] == ""
+            and canceled["result_json"] is None, "cancel-before-handoff tombstone changed")
+    return len(rows)
+
+
+def verify(evidence, runner, worker, voice_source, swaag_source, devtests_repo,
+           devtests_revision=DEVTESTS_REV, conversation=CONV):
+    e = Evidence(evidence)
+    attempt = e.obj("attempt.json")
+    require(attempt.get("conversation_id", conversation) == conversation, "wrong expected conversation")
+    require(attempt.get("fixture_sha256") == FIXTURE_SHA
+            and attempt.get("max_model_completions") == 1 and attempt.get("max_asr_requests") == 1
+            and attempt.get("max_tts_requests") == 1 and set(attempt["leases"]) == {"@@RUNNER_LEASE_HOST@@", "@@SPEECH_LEASE_HOST@@"},
+            "fixed input or admission changed")
+    source_counts = audit_sources(attempt, runner, worker, voice_source, swaag_source, devtests_repo, devtests_revision)
+    initial, initial_ready, initial_life = audit_effective(e, "initial", attempt, swaag_source)
+    replay, replay_ready, replay_life = audit_effective(e, "replay", attempt, swaag_source)
+    require(initial_ready["pid"] != replay_ready["pid"], "replay was not a fresh process")
+    require(initial["config_fingerprint"] == replay["config_fingerprint"], "replay configuration changed")
+    require(replay_life["audit_counts"].get("socket.connect", 0) == 0, "restart replay made a model connection")
+    asr_raw = e.obj("asr-raw.json")
+    require(asr_raw.get("ok") is True and asr_raw.get("engine") == "faster-whisper-large-v3",
+            "actual ASR result missing")
+    transcript = " ".join(asr_raw["text"].split())
+    require(transcript.lower().rstrip(".!?") == "can you repeat that for me", "fixed transcription failed")
+    input_raw = e.read("actual-asr-input.wav")
+    require(sha(input_raw) == FIXTURE_SHA and len(wav_pcm(input_raw)) == 137600, "actual ASR audio differs")
+    approvals = e.obj("manual-approval.json")
+    turn = approvals["turn_id"]
+    operation = "voice-" + sha((conversation + "\0" + turn).encode())
+    require(approvals.get("text") == transcript, "approved draft changed")
+    gateway_request_raw = e.read("gateway-request.json")
+    gateway_request = json.loads(gateway_request_raw)
+    require(gateway_request.get("conversation_id") == conversation and gateway_request.get("turn_id") == turn
+            and gateway_request.get("text") == transcript, "gateway not given approved text")
+    model_request_raw = e.read("model-request.json")
+    model_request = json.loads(model_request_raw)
+    model_raw = e.read("model-response.json")
+    model_text, model_terminal, model_rows = model_stream(model_raw)
+    decision = json.loads(model_text)
+    require(set(decision) == {"mode", "reply"} and decision["mode"] == "answer"
+            and isinstance(decision["reply"], str) and decision["reply"].strip(), "model did not choose direct answer")
+    reply = decision["reply"].strip()
+    require("tools" not in model_request and "tool_choice" not in model_request
+            and model_request.get("stream") is True, "model request is not tool-free streaming")
+    require(transcript in str(model_request.get("prompt", "")), "actual model prompt omitted user text")
+    require(model_terminal.get("truncated") is not True and model_terminal.get("stop_type") != "limit",
+            "model ended through truncation or token limit")
+
+    before = e.obj("history-before-replay.json")
+    after = e.obj("history-after-replay.json")
+    require(before == after and len(before) == 1, "restart changed or duplicated canonical history")
+    history_path = next(iter(before))
+    history_raw = e.read(history_path)
+    require(sha(history_raw) == before[history_path], "retained history differs from replay snapshot")
+    history = [json.loads(line) for line in history_raw.splitlines() if line.strip()]
+    session = audit_history(history)
+    def typed(kind):
+        return [x for x in history if x["type"] == kind]
+    sent = one(typed("model_request_sent"), "more than one actual agent model call")
+    received = one(typed("model_response_received"), "missing actual agent model completion")
+    completed = one(typed("turn_finished"), "duplicate/missing agent turn completion")
+    started = one(typed("turn_started"), "duplicate/missing agent turn")
+    require(sent["payload"]["kind"] == received["payload"]["kind"] == "orchestrator_interaction"
+            and sent["payload"]["attempt"] == received["payload"]["attempt"] == 1, "unexpected agent model path")
+    completion = received["payload"]["completion"]
+    require(completion["raw_request"] == model_request and completion["text"] == model_text,
+            "real wire response not the actual SWAAG model completion")
+    frozen = dict(sent["payload"]["request"])
+    require({k: v for k, v in model_request.items() if k != "stream"} ==
+            {k: v for k, v in frozen.items() if k != "stream"}, "journal model input differs from wire input")
+    require(started["payload"].get("execution_loop") == "fast_direct_foreground"
+            and started["payload"].get("user_text") == transcript
+            and completed["payload"].get("assistant_text") == reply and completed["payload"].get("tool_steps") == 0,
+            "no genuine direct runtime turn")
+    evaluation = one(typed("completion_evaluated"), "completion evaluation receipt missing")
+    require(evaluation["payload"].get("verification_scope") == "fast_foreground_unreviewed",
+            "narrow direct answer scope changed")
+    prohibited = {"tool_called", "tool_result", "tool_error", "agent_tool_call_completed",
+                  "delegated_tool_requested", "model_call_failed", "model_retry_scheduled"}
+    require(not [x for x in history if x["type"] in prohibited], "tool/retry effects in no-action run")
+
+    rpc = e.lines("rpc-wire.jsonl")
+    require(not [x for x in rpc if x.get("direction") == "error"], "RPC recorder errors")
+    request = one([x for x in rpc if x.get("direction") == "request"
+                   and x.get("payload", {}).get("op") == "orchestrator.message"
+                   and x["payload"].get("operation_id") == operation], "actual successful RPC request repeated")
+    require(request["payload"].get("message") == transcript and request["payload"].get("stream") is True,
+            "actual RPC message differs")
+    require(request["request_sha256"] == sha((json.dumps(request["payload"], separators=(",", ":")) + "\n").encode()),
+            "recorded RPC request hash differs from actual gateway encoding")
+    responses = [x["payload"] for x in rpc if x.get("direction") == "response"
+                 and x.get("request_sha256") == request["request_sha256"]]
+    accepted = one([x for x in responses if x.get("event") == "accepted"], "actual runtime acceptance missing")
+    terminal = one([x for x in responses if x.get("event") == "completed"], "actual runtime terminal missing")
+    require(accepted.get("ok") is True and accepted.get("operation_id") == operation
+            and accepted.get("session_id") == session and accepted.get("control_id"), "RPC identity mismatch")
+    require(all(x.get("session_id") == session and x.get("control_id") == accepted["control_id"]
+                and x.get("ok") is True for x in responses), "RPC identity changed")
+    require(terminal.get("result", {}).get("answer") == reply, "RPC returned a different answer")
+    processed = one(typed("control_message_processed"), "authoritative user receipt not consumed exactly once")
+    require(processed["payload"].get("control_id") == accepted["control_id"], "another user control was consumed")
+    sse = sse_events(e.read("gateway-response.sse"))
+    require(e.obj("gateway-response-meta.json")["status"] == 200
+            and [x.get("type") for x in sse] ==
+            ["RUN_STARTED", "TEXT_MESSAGE_START", "TEXT_MESSAGE_CONTENT", "TEXT_MESSAGE_END", "RUN_FINISHED"],
+            "gateway did not project one direct reply")
+    require(sse[0].get("operation_id") == operation and sse[2].get("delta") == reply
+            and sse[-1].get("result") == reply and sse[-1].get("session_id") == session, "SSE not bound to actual runtime")
+
+    canceled_id = "voice-" + sha((conversation + "-canceled\0never-submitted").encode())
+    cancel = e.obj("cancellation-first.json")
+    failed = e.obj("cancellation-submit.json")
+    cancel_status = e.obj("cancellation-status.json")
+    require(cancel["request"]["operation_id"] == canceled_id and cancel["http_status"] == 200
+            and failed["http_status"] == 502 and "cancel" in failed["response_text"].lower(),
+            "controlled cancellation failure not detected")
+    require(cancel_status["http_status"] == 200 and cancel_status["model_completions"] == 0
+            and cancel_status["response"].get("operation_id") == canceled_id
+            and cancel_status["response"].get("status") == "canceled"
+            and cancel_status["response"].get("cancel_requested") is True, "cancellation not durable")
+    interrupted = one([x for x in rpc if x.get("direction") == "request"
+                       and x.get("payload", {}).get("op") == "orchestrator.interrupt"
+                       and x["payload"].get("params", {}).get("operation_id") == canceled_id],
+                      "actual cancellation RPC missing")
+    interrupt_reply = one([x for x in rpc if x.get("direction") == "response"
+                           and x.get("request_sha256") == interrupted["request_sha256"]],
+                          "actual cancellation acknowledgement missing")
+    require(interrupt_reply["payload"].get("ok") is True
+            and interrupt_reply["payload"].get("result") == cancel["response"],
+            "gateway cancellation acknowledgement differs from actual runtime")
+    cancel_query = one([x for x in rpc if x.get("direction") == "request"
+                       and x.get("payload", {}).get("op") == "orchestrator.operation_status"
+                       and x["payload"].get("params", {}).get("operation_id") == canceled_id],
+                      "actual canceled operation query missing")
+    query_reply = one([x for x in rpc if x.get("direction") == "response"
+                      and x.get("request_sha256") == cancel_query["request_sha256"]],
+                     "actual canceled status response missing")
+    require(query_reply["payload"].get("ok") is True
+            and query_reply["payload"].get("result") == cancel_status["response"],
+            "gateway cancellation status differs from actual runtime")
+    canceled_request = one([x for x in rpc if x.get("direction") == "request"
+                            and x.get("payload", {}).get("op") == "orchestrator.message"
+                            and x["payload"].get("operation_id") == canceled_id], "cancel refusal RPC missing")
+    refused = one([x["payload"] for x in rpc if x.get("direction") == "response"
+                   and x.get("request_sha256") == canceled_request["request_sha256"]], "cancel response missing")
+    require(refused.get("ok") is False and "cancel" in str(refused.get("error", "")).lower(),
+            "actual SWAAG did not reject canceled operation")
+    require(interrupted["monotonic"] < interrupt_reply["monotonic"] < canceled_request["monotonic"]
+            < cancel_query["monotonic"] < query_reply["monotonic"] < e.obj("asr-attempt.json")["monotonic"],
+            "controlled cancel not before real voice work")
+
+    replay_request = e.obj("restart-replay-request.json")
+    replay_events = e.obj("restart-replay-response.json")
+    require(replay_request == {"op": "orchestrator.message", "message": transcript, "operation_id": operation,
+                              "stream": True, "after_sequence": 0}, "replay input identity changed")
+    replay_done = one([x for x in replay_events if x.get("event") == "completed"], "committed replay missing")
+    require(replay_done.get("ok") is True and replay_done.get("session_id") == session
+            and replay_done.get("result", {}).get("answer") == reply, "replay changed committed answer")
+    status = e.obj("completed-operation.json")
+    require(status["http_status"] == 200 and status["response"].get("operation_id") == operation
+            and status["response"].get("session_id") == session and status["response"].get("status") == "completed"
+            and status["response"].get("result", {}).get("answer") == reply, "operation completion not durable")
+
+    operation_rows = audit_operation_store(e, operation, canceled_id, transcript, session, reply, status["response"])
+
+    tts_request_raw = e.read("tts-request.json")
+    tts_request = json.loads(tts_request_raw)
+    # Source voice_speech.py normalizes question/exclamation marks before TTS.
+    # This independent oracle admits only the simple plain prose observed here;
+    # it does not import or silently reuse the application's speech renderer.
+    require(re.fullmatch(r"[A-Za-z][A-Za-z0-9, .'?!-]*[.?!]", reply) is not None
+            and "  " not in reply and ".." not in reply,
+            "reply is outside independently reviewed plain-prose speech scope")
+    spoken = reply.replace("?", ".").replace("!", ".").strip(" ,.") + "."
+    require(tts_request == {"text": spoken, "sample_rate": 16000}, "spoken text differs from real agent answer")
+    media = framed_pcm(e.read("tts-framed.bin"))
+    require(media == e.read("tts-pcm.bin") == e.read("recovered-media.pcm"), "recovered PCM is not original TTS")
+    first_media = e.read("first-media-frame.pcm")
+    require(first_media and media.startswith(first_media), "interrupted audio differs from recovered audio")
+    events = e.obj("ws-events.json")
+    require(events == e.lines("ws-events-progress.jsonl"), "event journals diverge")
+    stream_id = audit_ws(events, e.lines("ws-commands.jsonl"), turn, transcript, reply, operation)
+    persisted = one(e.obj("conversations/" + conversation + ".json")["dialogue_history"], "duplicate durable voice turn")
+    require(persisted.get("operation_id") == operation and persisted.get("turn_id") == turn
+            and persisted.get("raw_asr") == persisted.get("recognized_text") == persisted.get("submitted_text") == transcript
+            and persisted.get("assistant") == reply and persisted.get("status") == "completed"
+            and persisted.get("requires_review") is True and persisted.get("audio_completed") is True
+            and persisted.get("audio_transmitted") is True and persisted.get("audio_stream_id") == stream_id,
+            "durable voice record not tied to acknowledged answer")
+    for key, expected in (("assistant_audio_path", media), ("user_audio_path", wav_pcm(input_raw))):
+        path = Path(persisted[key])
+        require(inside(e.root, path), "persisted audio outside test root")
+        require(wav_pcm(e.read(path.relative_to(e.root))) == expected, "persisted WAV differs")
+
+    times = [e.obj(name)["monotonic"] for name in
+             ("asr-attempt.json", "manual-approval.json", "agent-attempt.json", "model-attempt.json", "tts-attempt.json")]
+    require(all(isinstance(x, (float, int)) and math.isfinite(x) for x in times)
+            and times == sorted(times) and len(set(times)) == len(times), "upstream chronology not approval-gated")
+    for name, raw in (("asr", input_raw), ("agent", gateway_request_raw),
+                      ("model", model_request_raw), ("tts", tts_request_raw)):
+        require(e.obj(name + "-attempt.json")["request_sha256"] == sha(raw), "upstream request hash mismatch")
+    model_http = e.lines("model-http.jsonl")
+    require(not [x for x in model_http if x.get("denied_or_failed")], "model call denied/failed during run or replay")
+    calls = [x for x in model_http if x.get("path") == "/completion"]
+    actual_call = one(calls, "actual completion repeated")
+    require(actual_call.get("status") == 200 and actual_call.get("request_sha256") == sha(model_request_raw)
+            and actual_call.get("response_sha256") == sha(model_raw), "model HTTP evidence mismatch")
+    upstream = e.lines("upstream-events.jsonl")
+    require(collections.Counter(x.get("kind") for x in upstream) == {"asr": 1, "agent": 1, "tts": 1}
+            and all(x.get("status") == "completed" for x in upstream), "not one completed upstream call each")
+    require(not (e.root / "wss-denied-egress.jsonl").exists(), "WSS attempted outside egress")
+    cfg = e.obj("private-config.json")
+    require(cfg["server"]["host"] == "127.0.0.1"
+            and cfg["interaction"]["require_verified_speaker_for_auto_send"] is True
+            and cfg["worker_events"]["host"] == "127.0.0.1" and cfg["worker_events"]["port"] == 9,
+            "WSS isolation configuration changed")
+    for group in ("asr", "llm", "tts"):
+        require(all(not value or str(value).startswith("http://127.0.0.1:")
+                    for key, value in cfg[group].items() if key.endswith("_url") or key == "url"),
+                "WSS direct nonprivate route")
+    result = e.obj("result.json")
+    require(result.get("status") == "real_runtime_recorded_voice_reconnect_cancel_and_restart_replay_verified"
+            and result.get("wss_stopped") is True and result.get("agent_stopped") is True,
+            "not a completed cleaned-up attempt")
+    elapsed = result["elapsed_seconds"]
+    require(isinstance(elapsed, (float, int)) and math.isfinite(elapsed) and elapsed > 0, "bad elapsed measurement")
+    utc_elapsed = (datetime.datetime.fromisoformat(result["utc"]) - datetime.datetime.fromisoformat(attempt["utc"])).total_seconds()
+    require(abs(utc_elapsed - elapsed) < 1.0, "task clock measurements disagree")
+    durations = {x["kind"]: x["elapsed_seconds"] for x in upstream}
+    require(all(0 < x <= elapsed for x in durations.values()), "invalid measured durations")
+    return {
+        "status": "independently_verified_real_runtime_recorded_voice_evidence",
+        "swaag_revision": SWAAG_REV, "devtests_revision": devtests_revision,
+        "voice_source_files": source_counts[0], "swaag_source_files": source_counts[1],
+        "actual_handler": "swaag.communication.CommunicationService.handle_client",
+        "one_actual_model_completion": True, "actual_tool_calls": 0,
+        "canonical_history_events": len(history), "history_hash_chain_valid": True,
+        "canceled_before_handoff_rejected_by_actual_agent": True,
+        "cancellation_interrupted_running_model": False,
+        "three_socket_generations": True, "recovered_pcm_identical": True, "durable_playback_ack": True,
+        "new_process_replay_with_zero_model_egress": True, "persisted_operation_rows": operation_rows,
+        "transcript": transcript, "reply": reply, "spoken_text": spoken, "input_seconds": 4.3, "output_seconds": len(media) / 32000,
+        "task_elapsed_seconds": elapsed, "task_utc_elapsed_seconds": utc_elapsed,
+        "model_proxy_elapsed_seconds": actual_call["elapsed_seconds"],
+        "model_native_timings": model_terminal.get("timings", {}),
+        "upstream_seconds": durations, "evidence_sha256": e.digests,
+        "limitations": ["Recorded public audio, not physical microphone or phone acceptance.",
+                       "Client playback acknowledgement does not prove audible physical playback.",
+                       "Buffers in test relays prevent interpreting this as true streaming first-token latency.",
+                       "Fast direct conversation has no independent semantic completion-review model.",
+                       "Private handle_client listener omits serve_tcp background startup loops.",
+                       "Python admission hooks are not an operating-system security sandbox.",
+                       "No installed-service, automatic turn detection, speaker recognition, or multi-step task claim."],
+    }
+
+
+
+def classify_failed_attempt(evidence):
+    e = Evidence(evidence)
+    result = e.obj("result.json")
+    if result.get("status") == "real_runtime_recorded_voice_reconnect_cancel_and_restart_replay_verified":
+        return None
+    observed = {kind: (e.root / (kind + "-attempt.json")).is_file()
+                for kind in ("asr", "agent", "model", "tts")}
+    if observed["model"]:
+        classification = "live_model_or_later_integration_failure"
+    elif observed["agent"]:
+        classification = "actual_agent_failure_before_observed_generation"
+    elif observed["asr"]:
+        classification = "live_speech_service_or_later_setup_failure"
+    else:
+        classification = "setup_failure"
+    return {"status": "not_verified", "classification": classification,
+            "recorded_error_type": result.get("error_type"), "recorded_error": result.get("error"),
+            "observed_upstream_attempt_artifacts": observed,
+            "evidence_sha256": e.digests,
+            "limitation": "This classification records the observed failed attempt, not successful end-to-end voice."}
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    for name in ("evidence", "runner", "worker", "voice-source", "swaag-source", "devtests-repo"):
+        parser.add_argument("--" + name, type=Path, required=True)
+    parser.add_argument("--expected-devtests-revision", default=DEVTESTS_REV)
+    parser.add_argument("--conversation", default=CONV)
+    args = parser.parse_args()
+    try:
+        failed = classify_failed_attempt(args.evidence)
+        if failed is not None:
+            print(json.dumps(failed, indent=2, ensure_ascii=False))
+            return 3
+        result = verify(args.evidence, args.runner, args.worker, args.voice_source,
+                        args.swaag_source, args.devtests_repo, args.expected_devtests_revision, args.conversation)
+    except (ValueError, KeyError, TypeError, OSError, sqlite3.Error, subprocess.SubprocessError) as exc:
+        print(json.dumps({"status": "not_verified", "classification": "evidence_inconsistent_or_incomplete",
+                          "error_type": type(exc).__name__, "error": str(exc)}, indent=2))
+        return 2
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    return 0
+
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

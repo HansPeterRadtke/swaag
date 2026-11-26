@@ -1,0 +1,577 @@
+#!/usr/bin/env python3
+"""One-use recorded speech through real SWAAG, source gateway and source WSS.
+
+The only upstream effects are one ASR request, at most one actual model
+completion and one TTS request. All agent tools and external integrations are
+disabled and state is private. This is a recorded-audio network-interface test,
+not a physical microphone, phone, installed-service or automatic-speech claim.
+"""
+from __future__ import annotations
+import argparse, asyncio, dataclasses, datetime, hashlib, http.server, io, json
+import os, pathlib, shlex, socket, socketserver, struct, subprocess, sys, threading, time
+import urllib.error, urllib.parse, urllib.request, wave
+from pathlib import Path
+
+SWAAG_REV = "06fcf206f2b448cb8f1f518377e38105b50cbd60"
+DEVTESTS_REV = "28ab9dc2ca166b9bdc942939a510ec8ebb7ee01a"
+FIXTURE_SHA = "60fa1df444a16cdf558ca052cf087f49b9ed7ed238bf68d0b24e7906aaac71c0"
+CONV = "w111-real-swaag-confirmed-public-repeat-wscompat"
+MODEL_BASE = "@@MODEL_BASE_URL@@"
+ASR = "@@ASR_URL@@"
+TTS = "@@TTS_URL@@"
+OWNER = "@@BROKER_OWNER@@"
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        raise RuntimeError("redirect refused")
+OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+
+def now(): return datetime.datetime.now(datetime.timezone.utc).isoformat()
+def sha(b): return hashlib.sha256(b).hexdigest()
+def unique(p, data):
+    fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "wb") as f:
+        f.write(data); f.flush(); os.fsync(f.fileno())
+def put(p, value): unique(p, json.dumps(value, ensure_ascii=False, indent=2).encode())
+def journal(p, value):
+    with p.open("a", encoding="utf-8") as f:
+        f.write(json.dumps({"utc": now(), "monotonic": time.monotonic(), **value}, ensure_ascii=False)+"\n")
+        f.flush()
+def fetch(url, raw=None, content="application/json", timeout=120, headers=None):
+    req = urllib.request.Request(url, data=raw, headers={"Content-Type":content, **(headers or {})},
+                                 method="GET" if raw is None else "POST")
+    try: response = OPENER.open(req, timeout=timeout)
+    except urllib.error.HTTPError as e: response = e
+    with response:
+        data = response.read(4000001)
+        if len(data)>4000000: raise RuntimeError("oversized upstream response")
+        return response.status, dict(response.headers), data
+def pcm_of(raw):
+    with wave.open(io.BytesIO(raw),"rb") as w:
+        if (w.getnchannels(), w.getsampwidth(), w.getframerate()) != (1,2,16000):
+            raise ValueError("expected public mono16k PCM16")
+        return w.readframes(w.getnframes())
+def unframe(raw):
+    i=0; out=bytearray()
+    while i+4<=len(raw):
+        n=struct.unpack("!I",raw[i:i+4])[0]; i+=4
+        if n==0:
+            if i!=len(raw) or not out: raise ValueError("invalid media terminator")
+            return bytes(out)
+        if n%2 or n>1000000 or i+n>len(raw): raise ValueError("invalid media frame")
+        out.extend(raw[i:i+n]); i+=n
+    raise ValueError("missing media terminator")
+def sse(raw):
+    return [json.loads(line[6:]) for line in raw.decode().splitlines() if line.startswith("data: ")]
+def op_id(conv, turn): return "voice-"+sha((conv+"\0"+turn).encode())
+def stop(child):
+    if child is not None and child.poll() is None:
+        child.terminate()
+        try: child.wait(12)
+        except subprocess.TimeoutExpired:
+            child.kill(); child.wait(5)
+    return child is None or child.poll() is not None
+
+class RecordedHTTP:
+    def __init__(self, root):
+        self.root=root; self.server=None; self.thread=None
+    def start(self, handler):
+        self.server=http.server.ThreadingHTTPServer(("127.0.0.1",0),handler)
+        self.server.daemon_threads=False
+        self.thread=threading.Thread(target=self.server.serve_forever,daemon=True)
+        self.thread.start()
+        return self.server.server_address[1]
+    def close(self):
+        if self.server:
+            self.server.shutdown(); self.server.server_close(); self.thread.join(5)
+
+class ModelProxy(RecordedHTTP):
+    def __init__(self,root):
+        super().__init__(root); self.lock=threading.Lock()
+        self.approved=False; self.sealed=False; self.completions=0; self.errors=[]; self.timings={}
+    def open(self):
+        outer=self
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def log_message(self,*args): pass
+            def do_GET(self): self.dispatch(None)
+            def do_POST(self):
+                n=int(self.headers.get("Content-Length","0"))
+                if not 0<n<=2000000: self.send_error(400); return
+                self.dispatch(self.rfile.read(n))
+            def dispatch(self,raw):
+                begin=time.monotonic()
+                try:
+                    allowed_get={"/props","/health","/slots"}
+                    allowed_post={"/tokenize","/apply-template","/completion"}
+                    if (raw is None and self.path not in allowed_get) or (raw is not None and self.path not in allowed_post):
+                        raise RuntimeError("model proxy route refused: "+self.path)
+                    with outer.lock:
+                        if outer.sealed: raise RuntimeError("model egress sealed for replay")
+                        if self.path=="/completion":
+                            if not outer.approved or outer.completions:
+                                raise RuntimeError("unapproved or duplicate model completion refused")
+                            outer.completions+=1
+                            put(outer.root/"model-attempt.json",{"utc":now(),"monotonic":begin,
+                                "path":self.path,"request_sha256":sha(raw)})
+                            unique(outer.root/"model-request.json",raw)
+                    status,headers,data=fetch(MODEL_BASE+self.path,raw,timeout=115)
+                    if self.path=="/completion":
+                        unique(outer.root/"model-response.json",data)
+                        outer.timings["model"]=time.monotonic()-begin
+                    journal(outer.root/"model-http.jsonl",{"method":self.command,"path":self.path,
+                        "request_sha256":sha(raw or b""),"response_sha256":sha(data),
+                        "status":status,"elapsed_seconds":time.monotonic()-begin})
+                    self.send_response(status); self.send_header("Content-Type",headers.get("Content-Type","application/json"))
+                    self.send_header("Content-Length",str(len(data))); self.end_headers();self.wfile.write(data)
+                except Exception as e:
+                    outer.errors.append(type(e).__name__+": "+str(e))
+                    journal(outer.root/"model-http.jsonl",{"path":self.path,"denied_or_failed":str(e)})
+                    self.send_error(503)
+        return self.start(Handler)
+
+class VoiceRelay(RecordedHTTP):
+    def __init__(self,root,pcm,renderer,gateway,model):
+        super().__init__(root)
+        self.pcm=pcm; self.renderer=renderer; self.gateway=gateway; self.model=model
+        self.lock=threading.Lock(); self.count={"asr":0,"agent":0,"tts":0}
+        self.approved=False; self.transcript=None; self.reply=None; self.turn=None;self.errors=[];self.timings={}
+    def invoke(self,kind,body):
+        begin=time.monotonic()
+        with self.lock:
+            if self.count[kind]: raise RuntimeError("duplicate "+kind+" refused")
+            if kind!="asr" and not self.approved: raise RuntimeError("manual approval missing")
+            self.count[kind]+=1
+            put(self.root/(kind+"-attempt.json"),{"utc":now(),"monotonic":begin,"request_sha256":sha(body)})
+        if kind=="asr":
+            if pcm_of(body)!=self.pcm: raise ValueError("input PCM drift")
+            unique(self.root/"actual-asr-input.wav",body)
+            status,headers,raw=fetch(ASR,body,"audio/wav",55,{"X-Voice-Language":"auto"})
+            unique(self.root/"asr-raw.json",raw)
+            if status!=200: raise RuntimeError("actual ASR failed "+str(status))
+            self.transcript=" ".join(json.loads(raw)["text"].split())
+            normalized=self.transcript.lower().rstrip(".!?")
+            if normalized!="can you repeat that for me": raise ValueError("actual ASR differs from fixed expected recording")
+            result=raw; content="application/json"
+        elif kind=="agent":
+            value=json.loads(body)
+            if value.get("conversation_id")!=CONV or value.get("turn_id")!=self.turn or value.get("text")!=self.transcript:
+                raise ValueError("not exact manually confirmed draft")
+            unique(self.root/"gateway-request.json",body)
+            self.model.approved=True
+            status,headers,raw=fetch(self.gateway+"/v1/voice/run",body,timeout=135)
+            unique(self.root/"gateway-response.sse",raw)
+            put(self.root/"gateway-response-meta.json",{"status":status,"headers":headers})
+            events=sse(raw) if status==200 else []
+            done=[e for e in events if e.get("type")=="RUN_FINISHED"]
+            if status!=200 or len(done)!=1 or any(e.get("type")=="RUN_ERROR" for e in events):
+                raise RuntimeError("actual SWAAG did not complete: "+raw.decode(errors="replace")[-600:])
+            self.reply=done[0].get("result")
+            if not isinstance(self.reply,str) or not self.reply.strip() or len(self.reply)>600:
+                raise ValueError("no bounded actual answer")
+            result=raw;content=headers.get("Content-Type","text/event-stream")
+        else:
+            value=json.loads(body)
+            if not self.reply or value!={"text":self.renderer(self.reply),"sample_rate":16000}:
+                raise ValueError("TTS not derived from actual committed answer")
+            unique(self.root/"tts-request.json",body)
+            status,headers,raw=fetch(TTS,body,timeout=60)
+            if status!=200:raise RuntimeError("actual TTS failed "+str(status))
+            pcm=unframe(raw)
+            if not 16000<=len(pcm)<=1600000:raise ValueError("unexpected output duration")
+            unique(self.root/"tts-framed.bin",raw);unique(self.root/"tts-pcm.bin",pcm)
+            result=raw;content="application/octet-stream"
+        self.timings[kind]=time.monotonic()-begin
+        journal(self.root/"upstream-events.jsonl",{"kind":kind,"elapsed_seconds":self.timings[kind],"status":"completed"})
+        return result,content
+    def open(self):
+        outer=self
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def log_message(self,*args):pass
+            def do_GET(self):
+                if self.path.startswith("/v1/voice/operation?") and outer.turn and outer.approved:
+                    expected=op_id(CONV,outer.turn)
+                    if urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("operation_id")!=[expected]:
+                        self.send_error(403);return
+                    status,headers,raw=fetch(outer.gateway+self.path,timeout=15)
+                    journal(outer.root/"operation-status-polls.jsonl",{"path":self.path,"status":status,"response":json.loads(raw)})
+                    self.send_response(status);self.send_header("Content-Length",str(len(raw)));self.end_headers();self.wfile.write(raw)
+                else:self.send_error(404)
+            def do_POST(self):
+                kind={"/v1/voice/transcribe-verify":"asr","/v1/voice/run":"agent","/synthesize-stream":"tts"}.get(self.path)
+                if not kind:outer.errors.append("unexpected POST "+self.path);self.send_error(403);return
+                try:
+                    n=int(self.headers.get("Content-Length","0"))
+                    if not 0<n<1000000:raise ValueError("bad request length")
+                    data,ctype=outer.invoke(kind,self.rfile.read(n))
+                    self.send_response(200);self.send_header("Content-Type",ctype);self.send_header("Content-Length",str(len(data)))
+                    self.end_headers();self.wfile.write(data)
+                except Exception as e:
+                    outer.errors.append(kind+": "+type(e).__name__+": "+str(e)[:700])
+                    journal(outer.root/"upstream-events.jsonl",{"kind":kind,"status":"failed","error":str(e)})
+                    try:self.send_error(502)
+                    except OSError:pass
+        return self.start(Handler)
+
+class RPCRecorder:
+    def __init__(self,root,upstream):
+        self.root=root;self.upstream=upstream;self.lock=threading.Lock();self.server=None;self.thread=None;self.errors=[]
+    def record(self,value):
+        with self.lock:journal(self.root/'rpc-wire.jsonl',value)
+    def open(self):
+        outer=self
+        class Handler(socketserver.StreamRequestHandler):
+            def handle(self):
+                try:
+                    self.request.settimeout(145)
+                    raw=self.rfile.readline(1000000)
+                    request=json.loads(raw)
+                    if request.get('op') not in {'orchestrator.message','orchestrator.operation_status','orchestrator.interrupt'}:
+                        raise PermissionError('RPC outside no-action scope')
+                    token=sha(raw)
+                    outer.record({'direction':'request','request_sha256':token,'payload':request})
+                    with socket.create_connection(('127.0.0.1',outer.upstream),timeout=10) as remote:
+                        remote.settimeout(140);remote.sendall(raw)
+                        with remote.makefile('rb') as incoming:
+                            while True:
+                                line=incoming.readline(4000000)
+                                if not line:break
+                                event=json.loads(line)
+                                outer.record({'direction':'response','request_sha256':token,'payload':event})
+                                self.wfile.write(line);self.wfile.flush()
+                                if not request.get('stream') or event.get('event') in {'completed','error'} or event.get('ok') is False:break
+                except Exception as e:
+                    outer.errors.append(type(e).__name__+': '+str(e));outer.record({'direction':'error','error':str(e)})
+        class Server(socketserver.ThreadingTCPServer):allow_reuse_address=False;daemon_threads=False
+        self.server=Server(('127.0.0.1',0),Handler)
+        self.thread=threading.Thread(target=self.server.serve_forever,daemon=True);self.thread.start()
+        return self.server.server_address[1]
+    def close(self):
+        if self.server:self.server.shutdown();self.server.server_close();self.thread.join(5)
+
+def read_rpc(port,request,root,name):
+    unique(root/(name+"-request.json"),json.dumps(request).encode())
+    events=[]
+    with socket.create_connection(("127.0.0.1",port),timeout=10) as sock:
+        sock.settimeout(15);sock.sendall((json.dumps(request)+"\n").encode())
+        with sock.makefile("rb") as f:
+            while True:
+                line=f.readline(4000000)
+                if not line:break
+                event=json.loads(line);events.append(event)
+                if not request.get("stream") or event.get("event") in ("completed","error") or event.get("ok") is False:break
+    put(root/(name+"-response.json"),events)
+    return events
+
+def start_agent(args,root,model_port,phase):
+    ready=root/("agent-"+phase+"-ready.json")
+    env={**os.environ,"PYTHONDONTWRITEBYTECODE":"1",
+         "PYTHONPATH":"@@AGENT_SITE_PACKAGES@@:"+str(args.swaag_source/"src"),
+         "LD_PRELOAD":"@@SQLITE_PRELOAD@@",
+         "OMP_NUM_THREADS":"1","OPENBLAS_NUM_THREADS":"1"}
+    with (root/("agent-"+phase+"-console.log")).open("xb") as log:
+        child=subprocess.Popen(["@@AGENT_PYTHON@@","-u",str(args.worker),
+            "--config",str(root/"agent-config.toml"),"--swaag-source",str(args.swaag_source),
+            "--evidence",str(root),"--model-proxy-port",str(model_port),"--ready-file",ready.name],
+            cwd=root,stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT,env=env,start_new_session=True)
+    try:
+        for _ in range(200):
+            if child.poll() is not None:raise RuntimeError("actual agent child exited; see "+phase+" log")
+            if ready.exists():return child,json.loads(ready.read_text())["port"]
+            time.sleep(.1)
+        raise RuntimeError("actual agent child readiness deadline")
+    except BaseException:stop(child);raise
+
+def gateway_config(source,port):
+    from voice_agent_gateway_config import (GatewayConfig,ServerConfig,ModelConfig,StrongModelConfig,SwaagConfig,
+        HistoryConfig,EventConfig,LoggingConfig,PromptConfig,ToolDescriptionConfig)
+    blocked="http://127.0.0.1:9/unavailable"
+    return GatewayConfig(source,sha(source.read_bytes()),ServerConfig("127.0.0.1",1,2,2000000,4,2,2,120),
+        ModelConfig(blocked,blocked,"unused-gateway-model",110,120,0,120,0,False),
+        StrongModelConfig(blocked),SwaagConfig("127.0.0.1",port,60,60,4000000,128),
+        HistoryConfig(20000,0),EventConfig(200,1,.1,1,500),LoggingConfig("ERROR",False),
+        PromptConfig("unused actual orchestrator route","unused"),ToolDescriptionConfig("disabled","disabled","disabled","disabled"))
+
+def cancellation(gateway,model,root):
+    conv=CONV+"-canceled";turn="never-submitted";operation=op_id(conv,turn)
+    packet={"operation_id":operation,"reason":"controlled cancellation before handoff"}
+    status,_,raw=fetch(gateway+"/v1/voice/cancel",json.dumps(packet).encode())
+    put(root/"cancellation-first.json",{"request":packet,"http_status":status,"response":json.loads(raw)})
+    if status!=200:raise AssertionError("real cancellation rejected")
+    original={"conversation_id":conv,"turn_id":turn,"text":"This request was canceled before it was submitted."}
+    status,_,raw=fetch(gateway+"/v1/voice/run",json.dumps(original).encode())
+    put(root/"cancellation-submit.json",{"request":original,"http_status":status,"response_text":raw.decode()})
+    if status!=502:raise AssertionError("canceled operation did not report actual rejection")
+    status,_,raw=fetch(gateway+"/v1/voice/operation?operation_id="+operation)
+    result=json.loads(raw)
+    put(root/"cancellation-status.json",{"http_status":status,"response":result,"model_completions":model.completions})
+    if status!=200 or "cancel" not in str(result.get("status","")).lower() or model.completions:
+        raise AssertionError("canceled tombstone or no-inference boundary failed")
+
+# The authenticated WebSocket scenario is appended from the reviewed W103
+# source, with new fixed identity, request journal, and actual-agent naming.
+
+async def scenario(port,relay,root):
+    from websockets.legacy.client import connect
+    url='ws://127.0.0.1:'+str(port)+'/ws?conversation='+CONV+'&generation='
+    headers={'Authorization':'Bearer test-only-private-voice-key'}
+    events=[]
+    async def receive(ws,pred,seconds=20,allow_audio=False):
+        end=time.monotonic()+seconds
+        while True:
+            x=await asyncio.wait_for(ws.recv(),max(.01,end-time.monotonic()))
+            if isinstance(x,bytes):
+                if not allow_audio:raise AssertionError('media before approval')
+                if pred(x):return x
+                continue
+            d=json.loads(x);events.append(d)
+            with (root/'ws-events-progress.jsonl').open('a',encoding='utf-8') as f:
+                f.write(json.dumps(d,ensure_ascii=False)+'\n')
+            if d.get('type')=='error':raise AssertionError('server error: '+str(d)[:200])
+            if not relay.approved and (d.get('type') in ('audio','turn_proposal') or
+                    (d.get('type')=='turn' and d.get('event')=='submitted')):
+                raise AssertionError('unapproved submission')
+            if pred(d):return d
+    def event(typ,**kw):
+        return lambda x:isinstance(x,dict) and x.get('type')==typ and all(x.get(k)==v for k,v in kw.items())
+    async def hello(ws):
+        h=await receive(ws,event('hello'))
+        if h.get('unverified_speaker_requires_review') is not True:raise AssertionError('speaker gate absent')
+        return await receive(ws,event('history'))
+    async def send(ws,d):
+        journal(root/'ws-commands.jsonl', {'command':d})
+        await ws.send(json.dumps(d,ensure_ascii=False))
+    async with connect(url+'1',extra_headers=headers,close_timeout=1,max_size=2**20) as ws:
+        if (await hello(ws))['turns']:raise AssertionError('nonempty fresh history')
+        await send(ws,{'type':'client_state','auto_send':False,'auto_transcribe':False,'media_protocol':0})
+        await send(ws,{'type':'begin_manual_utterance'})
+        await receive(ws,event('state',state='transcribing',source='manual_recording'))
+        for i in range(0,len(relay.pcm),1920):
+            await ws.send(relay.pcm[i:i+1920])
+            await asyncio.sleep(.01)
+        await send(ws,{'type':'end_utterance'})
+        final=await receive(ws,event('asr',event='final'),65)
+        await receive(ws,event('state',state='awaiting_send'))
+        if final.get('text')!=relay.transcript or relay.count!={'asr':1,'agent':0,'tts':0}:
+            raise AssertionError('ASR or no-action boundary mismatch')
+        relay.turn=final['turn_id']
+    async with connect(url+'2',extra_headers=headers,close_timeout=1,max_size=2**20) as ws:
+        h=await hello(ws)
+        rows=h['turns']
+        if len(rows)!=1 or rows[0]['status']!='draft' or rows[0]['recognized_text']!=relay.transcript or rows[0]['assistant']:
+            raise AssertionError('draft failed to survive reconnect')
+        restored=await receive(ws,event('asr',event='final',restored=True))
+        if restored['turn_id']!=relay.turn or restored['text']!=relay.transcript:
+            raise AssertionError('wrong restored draft')
+        if relay.count!={'asr':1,'agent':0,'tts':0}:raise AssertionError('premature request')
+        # Challenge automatic submission twice with an untrusted client claim.
+        # The relay cannot invoke SWAAG or TTS before the explicit manual gate.
+        await send(ws,{'type':'client_state','auto_send':True,'speaker_identity':'owner',
+                       'speaker_verified':True,'auto_commit_supported':True,'media_protocol':0})
+        await receive(ws,event('state',state='awaiting_send',reason='speaker_identity_unverified'))
+        await send(ws,{'type':'commit_turn','proposal_id':'forged-automatic-proposal',
+                       'text':relay.transcript,'turn_id':relay.turn})
+        await receive(ws,event('state',state='awaiting_send',reason='speaker_identity_unverified'))
+        await send(ws,{'type':'history_get'})
+        h=await receive(ws,event('history'))
+        if (len(h['turns'])!=1 or h['turns'][0]['status']!='draft'
+                or h['turns'][0]['assistant'] or relay.count!={'asr':1,'agent':0,'tts':0}):
+            raise AssertionError('untrusted client escaped manual review')
+        put(root/'manual-approval.json',{'utc':now(),'monotonic':time.monotonic(),'turn_id':relay.turn,'text':relay.transcript})
+        relay.approved=True
+        await send(ws,{'type':'submit','turn_id':relay.turn,'text':relay.transcript})
+        start=await receive(ws,event('audio',event='start'),125)
+        first=await receive(ws,lambda x:isinstance(x,bytes),20,True)
+        if not first:raise AssertionError('empty first frame')
+        unique(root/'first-media-frame.pcm',first)
+        # Normal disconnect before the end, NOT a lost playback ACK.
+        await ws.close()
+    async with connect(url+'3',extra_headers=headers,close_timeout=1,max_size=2**20) as ws:
+        await hello(ws)
+        resumed=await receive(ws,event('audio',event='start'),60)
+        if resumed.get('resumed') is not True or resumed['turn_id']!=relay.turn:
+            raise AssertionError('expected recovered audio stream')
+        chunks=[]
+        def collect(x):
+            if isinstance(x,bytes):chunks.append(x);return False
+            return event('audio',event='end')(x)
+        end=await receive(ws,collect,60,True)
+        media=b''.join(chunks)
+        if media!=(root/'tts-pcm.bin').read_bytes():raise AssertionError('reconnected media mismatch')
+        if not media.startswith(first):raise AssertionError('first stream differs from recovered audio')
+        if end['stream_id']!=resumed['stream_id']:raise AssertionError('stream identity changed')
+        await send(ws,{'type':'playback_completed','turn_id':relay.turn,
+                       'stream_id':end['stream_id'],'generation':end['generation']})
+        await send(ws,{'type':'history_get'})
+        final=await receive(ws,event('history'),10)
+        rows=final['turns']
+        if len(rows)!=1 or rows[0]['assistant']!=relay.reply or rows[0].get('audio_completed') is not True:
+            raise AssertionError('normal ACK not durably recorded')
+    unique(root/'recovered-media.pcm',media)
+    put(root/'ws-events.json',events)
+    return {'draft_restored':True,'forged_owner_and_commit_refused':True,'audio_recovered':True,'normal_playback_ack':True,
+            'received_pcm_bytes':len(media),'first_stream_id':start['stream_id'],
+            'recovered_stream_id':resumed['stream_id'],'reply':relay.reply}
+
+def main():
+    p=argparse.ArgumentParser(description=__doc__)
+    for name in ("swaag-source","voice-source","template","fixture","worker","config-template","evidence"):
+        p.add_argument("--"+name,type=Path,required=True)
+    p.add_argument("--run",action="store_true")
+    args=p.parse_args()
+    sys.path.insert(0,str(args.swaag_source/"scripts/demos"))
+    from verify_isolated_voice_release_server import scrub_config
+    sys.path.insert(0,str(args.voice_source))
+    from voice_speech import render_for_speech
+    import voice_agent_gateway as gateway
+    baseline=json.loads((args.voice_source.parent.parent/"baseline.json").read_text())
+    if baseline!={"swaag":SWAAG_REV,"devtests":DEVTESTS_REV}:raise ValueError("baseline mismatch")
+    if subprocess.check_output(["git","-C",str(args.swaag_source),"rev-parse","HEAD"],text=True).strip()!=SWAAG_REV:
+        raise ValueError("SWAAG revision drift")
+    if subprocess.check_output(["git","-C",str(args.swaag_source),"status","--porcelain"],text=True).strip():
+        raise ValueError("SWAAG baseline dirty")
+    raw=args.fixture.read_bytes()
+    if sha(raw)!=FIXTURE_SHA:raise ValueError("public fixture drift")
+    pcm=pcm_of(raw)
+    if len(pcm)!=137600:raise ValueError("fixed public audio duration drift")
+    pins={str(f.relative_to(args.voice_source)):sha(f.read_bytes()) for f in sorted(args.voice_source.rglob("*.py"))}
+    if sha(args.template.read_bytes()) != '03ad88af3b85511316a07198633bf0812bea513029466a4b4e28a8dc9a8222ca':raise ValueError('voice template drift')
+    orig=json.loads(args.template.read_text())
+    if not args.run:
+        print(json.dumps({"preflight":True,"voice_source_files":len(pins),"input_pcm_bytes":len(pcm),
+            "swaag_revision":SWAAG_REV,"devtests_revision":DEVTESTS_REV}));return 0
+    if os.environ.get("SWAAG_W111_REAL_RUNTIME_ONCE")!="1":raise ValueError("explicit live no-action opt-in required")
+    # The broker grants refer to the shared resident services, not ownership of them.
+    proc=subprocess.run(["ssh","-T","-o","BatchMode=yes","-o","StrictHostKeyChecking=yes","-o","ConnectTimeout=5",
+        "@@BROKER_HOST@@","@@BROKER_EXECUTABLE@@ status"],capture_output=True,text=True,check=True,timeout=15)
+    broker=json.loads(proc.stdout);lease_ids={}
+    for host in ("@@RUNNER_LEASE_HOST@@","@@SPEECH_LEASE_HOST@@"):
+        state=broker["machines"][host]
+        matches=[x for x in state["requests"] if x.get("owner")==OWNER and x.get("state")=="active"]
+        if len(matches)!=1 or state["snapshot_status"]!="ok" or state["snapshot_age_seconds"]>90:
+            raise RuntimeError("fresh owned resource allowance missing: "+host)
+        lease_ids[host]=matches[0]["request_id"]
+    root=args.evidence
+    if root.exists() or root.is_symlink():raise FileExistsError("existing attempt must not be replayed")
+    root.mkdir(mode=0o700,parents=False)
+    put(root/"attempt.json",{"utc":now(),"monotonic":time.monotonic(),"swaag_revision":SWAAG_REV,
+        "devtests_revision":DEVTESTS_REV,"fixture_sha256":FIXTURE_SHA,"source_pins":pins,
+        "conversation_id":CONV,
+        "template_sha256":sha(args.template.read_bytes()),
+        "script_sha256":sha(Path(__file__).read_bytes()),"worker_sha256":sha(args.worker.read_bytes()),
+        "leases":lease_ids,"max_model_completions":1,"max_asr_requests":1,"max_tts_requests":1,
+        "phone_tested":False,"production_service_changed":False,
+        "scope":"actual handle_client, actual gateway and WSS; serve_tcp background startup omitted"})
+    unique(root/'runner-source.py',Path(__file__).read_bytes())
+    unique(root/'worker-source.py',args.worker.read_bytes())
+    unique(root/'voice-template-source.json',args.template.read_bytes())
+    model=ModelProxy(root);relay=None;gw=None;gwthread=None;agent=None;wss=None;rpc_recorder=None
+    result={"status":"failed_or_unknown"};begin=time.monotonic()
+    try:
+        (root/'readonly').mkdir()
+        model_port=model.open()
+        config=args.config_template.read_text().replace("__ROOT__",str(root)).replace("__MODEL_PORT__",str(model_port))
+        unique(root/"agent-config.toml",config.encode())
+        agent,agent_port=start_agent(args,root,model_port,"initial")
+        rpc_recorder=RPCRecorder(root,agent_port);recorded_rpc_port=rpc_recorder.open()
+        gateway.CONFIG=gateway_config(args.voice_source/"voice_agent_gateway.py",recorded_rpc_port)
+        class RestrictedGateway(gateway.Handler):
+            def do_GET(self):
+                if urllib.parse.urlsplit(self.path).path!="/v1/voice/operation":self.send_error(403);return
+                super().do_GET()
+            def do_POST(self):
+                if self.path not in ("/v1/voice/run","/v1/voice/cancel"):self.send_error(403);return
+                super().do_POST()
+        gw=gateway.BoundedThreadingHTTPServer(("127.0.0.1",0),RestrictedGateway,2)
+        gwthread=threading.Thread(target=gw.serve_forever,daemon=True);gwthread.start()
+        base_gateway="http://127.0.0.1:"+str(gw.server_address[1])
+        put(root/"gateway-effective.json",gateway.CONFIG.public_summary())
+        cancellation(base_gateway,model,root)
+        relay=VoiceRelay(root,pcm,render_for_speech,base_gateway,model);relay_port=relay.open()
+        with socket.socket() as sock:sock.bind(("127.0.0.1",0));port=sock.getsockname()[1]
+        cfg=scrub_config(orig,root,port);base="http://127.0.0.1:"+str(relay_port)
+        cfg["asr"].update(final_quality_enabled=True,final_quality_timeout_seconds=55,final_quality_url=base+"/v1/voice/transcribe-verify")
+        cfg["llm"].update(url=base+"/v1/voice/run")
+        cfg["tts"].update(service_url=base+"/synthesize",retry_count=1)
+        for group in ("asr","llm","tts"):
+            for key,value in cfg[group].items():
+                if (key.endswith("_url") or key=="url") and value and not str(value).startswith(("http://127.0.0.1:9/",base+"/")):
+                    raise ValueError("nonprivate WSS endpoint")
+        put(root/"private-config.json",cfg)
+        unique(root/"fake-only-bearer",b"test-only-private-voice-key\n")
+        unique(root/"inert-piper",b"#!/bin/sh\nexit 127\n");os.chmod(root/"inert-piper",0o700)
+        unique(root/"inert-piper.onnx",b"no-test-model");unique(root/"inert-piper.onnx.json",b"{}")
+        guard = """import sys,socket,runpy,json,time
+from pathlib import Path
+root=Path(sys.argv[1]);source=sys.argv[2];allowed=int(sys.argv[3])
+connect=socket.socket.connect;connect_ex=socket.socket.connect_ex
+def check(address):
+ if isinstance(address,tuple) and (str(address[0]),int(address[1])) not in {('127.0.0.1',allowed),('127.0.0.1',9)}:
+  with (root/'wss-denied-egress.jsonl').open('a') as f:f.write(json.dumps({'address':str(address),'monotonic':time.monotonic()})+'\\n')
+  raise PermissionError('WSS outside isolated network')
+def guarded(self,address):check(address);return connect(self,address)
+def guarded_ex(self,address):check(address);return connect_ex(self,address)
+socket.socket.connect=guarded;socket.socket.connect_ex=guarded_ex
+sys.argv=[source,'--config',str(root/'private-config.json')]
+runpy.run_path(source,run_name='__main__')
+"""
+        unique(root/"wss-worker.py",guard.encode())
+        with (root/"wss-console.log").open("xb") as sink:
+            wss=subprocess.Popen([sys.executable,"-u",str(root/"wss-worker.py"),str(root),
+                str(args.voice_source/"cloudflare_ws_voice_server.py"),str(relay_port)],cwd=root,
+                stdout=sink,stderr=subprocess.STDOUT,stdin=subprocess.DEVNULL,start_new_session=True,
+                env={**os.environ,"PYTHONPATH":str(args.voice_source),"PYTHONDONTWRITEBYTECODE":"1","OMP_NUM_THREADS":"1"})
+        for _ in range(100):
+            if wss.poll() is not None:raise RuntimeError("private WSS child exited")
+            try:
+                with socket.create_connection(("127.0.0.1",port),timeout=.1):break
+            except OSError:time.sleep(.1)
+        else:raise RuntimeError("private WSS did not listen")
+        result.update(asyncio.run(scenario(port,relay,root)))
+        operation=op_id(CONV,relay.turn)
+        status,_,raw=fetch(base_gateway+"/v1/voice/operation?operation_id="+operation)
+        put(root/"completed-operation.json",{"http_status":status,"response":json.loads(raw)})
+        if status!=200 or json.loads(raw).get("status")!="completed":raise AssertionError("no durable completed operation")
+        stop(wss);wss=None
+        original_histories={str(f.relative_to(root)):sha(f.read_bytes()) for f in root.rglob("complete_history.jsonl")}
+        put(root/"history-before-replay.json",original_histories)
+        stop(agent);agent=None;model.sealed=True
+        agent,agent_port=start_agent(args,root,model_port,"replay")
+        events=read_rpc(agent_port,{"op":"orchestrator.message","message":relay.transcript,
+            "operation_id":operation,"stream":True,"after_sequence":0},root,"restart-replay")
+        done=[x for x in events if x.get("event")=="completed"]
+        if len(done)!=1 or done[0].get("result",{}).get("answer")!=relay.reply:raise AssertionError("fresh-process committed replay failed")
+        current={str(f.relative_to(root)):sha(f.read_bytes()) for f in root.rglob("complete_history.jsonl")}
+        put(root/"history-after-replay.json",current)
+        if current!=original_histories:raise AssertionError("committed journal changed during replay")
+        if relay.count!={"asr":1,"agent":1,"tts":1} or model.completions!=1 or relay.errors or model.errors or rpc_recorder.errors:
+            raise AssertionError("unexpected repeated inference or upstream failure")
+        result.update(status="real_runtime_recorded_voice_reconnect_cancel_and_restart_replay_verified",
+            actual_operation_id=operation,transcript=relay.transcript,reply=relay.reply,
+            restart_replay_verified=True,canceled_before_handoff_refused=True)
+    except BaseException as e:
+        result.update(error_type=type(e).__name__,error=str(e)[:1000])
+    finally:
+        wss_stopped=stop(wss);agent_stopped=stop(agent)
+        if relay:relay.close()
+        if gw:gw.shutdown();gw.server_close();gwthread.join(5)
+        if rpc_recorder:rpc_recorder.close()
+        model.close()
+        lifecycle={}
+        for phase in ('initial','replay'):
+            file=root/('agent-'+phase+'-ready-lifecycle.json')
+            if file.exists():lifecycle[phase]=json.loads(file.read_text())
+        if result['status'].endswith('_verified') and (set(lifecycle)!={'initial','replay'} or any(x.get('boundary_violations') or x.get('status')!='stopped' or not x.get('listener_closed') for x in lifecycle.values())):
+            result.update(status='failed_cleanup_or_boundary',error='Actual worker lifecycle did not verify clean shutdown')
+        denied=root/'wss-denied-egress.jsonl'
+        wss_denied=[json.loads(line) for line in denied.read_text().splitlines()] if denied.exists() else []
+        if wss_denied and result['status'].endswith('_verified'):result.update(status='failed_wss_egress_boundary',error='Unexpected WSS egress attempt')
+        result['wss_denied_egress']=wss_denied
+        result['agent_lifecycle']=lifecycle
+        result.update(utc=now(),elapsed_seconds=time.monotonic()-begin,model_completions=model.completions,
+            model_timings=model.timings,model_errors=model.errors,
+            upstream_count=relay.count if relay else {},upstream_timings=relay.timings if relay else {},
+            upstream_errors=relay.errors if relay else [],wss_stopped=wss_stopped,agent_stopped=agent_stopped,
+            phone_tested=False,production_service_changed=False)
+        put(root/"result.json",result);print(json.dumps(result,ensure_ascii=False))
+    return 0 if result["status"].endswith("_verified") else 3
+
+if __name__=="__main__":raise SystemExit(main())

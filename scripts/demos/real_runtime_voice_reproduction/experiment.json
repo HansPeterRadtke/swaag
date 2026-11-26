@@ -1,0 +1,174 @@
+{
+  "format": "swaag.voice-source-bundle.v1",
+  "experiment": {
+    "name": "recorded-voice-real-runtime-2026-11-26",
+    "swaag_runtime_revision": "06fcf206f2b448cb8f1f518377e38105b50cbd60",
+    "voice_runtime_revision": "28ab9dc2ca166b9bdc942939a510ec8ebb7ee01a",
+    "voice_template_sha256": "03ad88af3b85511316a07198633bf0812bea513029466a4b4e28a8dc9a8222ca",
+    "voice_template_distribution": "Operator-supplied private dependency; not included.",
+    "fixed_audio": {
+      "dataset": "livekit/eot-bench-data",
+      "dataset_revision": "ae834af9e9bddf73d1f550c190aaeb99bf31f523",
+      "configuration": "en",
+      "split": "validation",
+      "cohort": "general",
+      "row_id": "en__489_62__user_turn_009",
+      "pinned_shard": "https://huggingface.co/datasets/livekit/eot-bench-data/resolve/ae834af9e9bddf73d1f550c190aaeb99bf31f523/data/en/validation-00000-of-00002.parquet",
+      "upstream_declared_license": "cc-by-4.0",
+      "sha256": "60fa1df444a16cdf558ca052cf087f49b9ed7ed238bf68d0b24e7906aaac71c0",
+      "frames": 68800,
+      "sample_rate": 16000,
+      "channels": 1,
+      "sample_width_bytes": 2,
+      "pcm_bytes": 137600,
+      "seconds": 4.3,
+      "expected_transcript": "Can you repeat that for me?",
+      "redistributed_audio": false,
+      "source_shard_sha256": "52bf7ff71e83d0214d744693839f8a6b14e78e0f26db20dfdb7f589453a50103",
+      "dataset_card_url": "https://huggingface.co/datasets/livekit/eot-bench-data/resolve/ae834af9e9bddf73d1f550c190aaeb99bf31f523/README.md"
+    },
+    "configured_model": {
+      "profile_name": "qwen38-27b-q8-full-262k",
+      "model_identity": "qwen38-27b-q8-full-262k",
+      "provider_name": "llama.cpp",
+      "thinking_mode": "disabled",
+      "temperature": 0.0,
+      "top_p": 1.0,
+      "seed": 0,
+      "fast_max_input_tokens": 4096,
+      "fast_min_output_tokens": 64,
+      "fast_desired_output_tokens": 144,
+      "max_generation_wall_seconds": 110.0,
+      "model_identity_is_a_local_profile_label": true,
+      "observed_max_output_tokens": 192,
+      "observed_model_basename": "Qwen3.8-27B-UD-Q8_K_XL.gguf",
+      "observed_server_build": "b9842-6f4f53f2b",
+      "properties_response_sha256": "da941b44ecf54a3843ae68ebf28b9e85ffa3f8978df98a044e43fab8b0726357",
+      "properties_match_accepted_run_responses": 5,
+      "model_weight_digest_established": false,
+      "public_model_repository_revision_established": false
+    },
+    "invocation": {
+      "environment_opt_in": "SWAAG_W111_REAL_RUNTIME_ONCE=1",
+      "expected_devtests_revision": "28ab9dc2ca166b9bdc942939a510ec8ebb7ee01a",
+      "conversation": "w111-real-swaag-confirmed-public-repeat-wscompat"
+    },
+    "scope": "Recorded public speech through actual isolated AgentRuntime, CommunicationService, gateway and WebSocket source; no agent tools; controlled pre-handoff cancellation, audio reconnect, acknowledged playback and fresh-process committed replay.",
+    "limits": [
+      "Renderer and corruption checks are offline source/evidence checks, not additional live runs.",
+      "Voice template, private deployment profile and runtime dependencies are operator-supplied.",
+      "No raw private evidence, profile values, input audio or generated audio is distributed.",
+      "No physical microphone, phone, audible playback, automatic speaker recognition or multi-step computer-task claim.",
+      "Runtime revision differs from any later source-bundle publication commit."
+    ],
+    "observed_runtime_qualification": {
+      "agent_python": "3.11.9",
+      "agent_sqlite": "3.51.3",
+      "voice_python": "3.12.3",
+      "voice_websockets": "15.0.1",
+      "native_python312_agent_environment_gap_repaired_by_this_test": false
+    },
+    "observed_sample": {
+      "actual_reply": "I don't have a previous message to repeat. What would you like me to say?",
+      "actual_tts_text": "I don't have a previous message to repeat. What would you like me to say.",
+      "counts": {
+        "asr_calls": 1,
+        "model_completion_requests": 1,
+        "model_backend_http_requests_including_metadata": 42,
+        "gateway_answer_operations": 1,
+        "tts_calls": 1,
+        "actual_agent_tool_calls": 0,
+        "completed_user_turns": 1,
+        "canonical_history_events": 21,
+        "socket_generations": 3,
+        "external_effect_count": 0
+      },
+      "external_effect_definition": "No external account, customer, publication or production mutation. Authorized resident inference and private test storage are excluded from this count.",
+      "elapsed_seconds": {
+        "entire_isolated_harness": 53.90034870500676,
+        "asr_service_request": 1.9664173999335617,
+        "actual_gateway_answer_operation": 25.798851341940463,
+        "model_completion_http_request": 16.120333822909743,
+        "native_model_prompt_evaluation": 5.165482,
+        "native_model_generation": 10.636085999999999,
+        "tts_service_request": 3.1068800741340965
+      },
+      "output_pcm_bytes": 128000,
+      "output_seconds": 4.0,
+      "evidence_verifier_status": "independently_verified_real_runtime_recorded_voice_evidence",
+      "corruptions_rejected": 14,
+      "result_sha256": "e085e83966896e19d389d89d51385461866d1cbd4a6feb8e730e87587456ff2f",
+      "verifier_output_sha256": "13be2934fbd5d0e78cd2e4f9a3d7a14910edb3cfefb9a4d6e8c3e81c2079f1ea",
+      "corruption_result_sha256": "500a6f3c81173d0ecc8849e4daccff15315476b0eb66868261af0c8b311a9ae7",
+      "claim_scope": "One retained original run, not an additional execution from this source bundle."
+    }
+  },
+  "profile_fields": {
+    "MODEL_BASE_URL": "base_url",
+    "ASR_URL": "url",
+    "TTS_URL": "url",
+    "BROKER_OWNER": "identifier",
+    "BROKER_HOST": "hostname",
+    "BROKER_EXECUTABLE": "path",
+    "RUNNER_LEASE_HOST": "identifier",
+    "SPEECH_LEASE_HOST": "identifier",
+    "AGENT_PYTHON": "path",
+    "AGENT_SITE_PACKAGES": "path",
+    "SQLITE_PRELOAD": "path",
+    "EVIDENCE_PREFIX": "directory_prefix"
+  },
+  "files": [
+    {
+      "template": "templates/verify_real_runtime_voice_once.py.in",
+      "output": "verify_real_runtime_voice_once.py",
+      "original_sha256": "3b9717854a1390b7c299263a463ef25d2b5134b16f4c09dce5f03961bd45500f",
+      "template_sha256": "742e2a096888c1ea818edbea8d5c04b1d36c58a989037293695faf3f57e57f45",
+      "placeholders": {
+        "MODEL_BASE_URL": 1,
+        "ASR_URL": 1,
+        "TTS_URL": 1,
+        "BROKER_OWNER": 1,
+        "AGENT_SITE_PACKAGES": 1,
+        "SQLITE_PRELOAD": 1,
+        "AGENT_PYTHON": 1,
+        "BROKER_HOST": 1,
+        "BROKER_EXECUTABLE": 1,
+        "RUNNER_LEASE_HOST": 1,
+        "SPEECH_LEASE_HOST": 1
+      }
+    },
+    {
+      "template": "templates/agent_rpc_worker.py.in",
+      "output": "agent_rpc_worker.py",
+      "original_sha256": "3fe011b9d54930558ab8b787f9d17678463c0132535b31130fb1b0b89c2d3dc2",
+      "template_sha256": "f7307e75dcadb5fa4701a50ce91b05f9e34663a8d4110a68ca25d164e1c16bbe",
+      "placeholders": {
+        "EVIDENCE_PREFIX": 1
+      }
+    },
+    {
+      "template": "templates/verify_real_runtime_voice_evidence.py.in",
+      "output": "verify_real_runtime_voice_evidence.py",
+      "original_sha256": "a3f7be91da7f8a28d66a095e93a936fc06186461177635ee6a276be90eff2f20",
+      "template_sha256": "1a02165452e15ffa7ab86f9bd6bd7193813f8074c289bc27902579010843d227",
+      "placeholders": {
+        "RUNNER_LEASE_HOST": 1,
+        "SPEECH_LEASE_HOST": 1
+      }
+    },
+    {
+      "template": "templates/test_real_runtime_voice_evidence.py.in",
+      "output": "test_real_runtime_voice_evidence.py",
+      "original_sha256": "887c617e911930a5abde4c5e3a353f07cb15a8e10622795d7f69fb744842174e",
+      "template_sha256": "887c617e911930a5abde4c5e3a353f07cb15a8e10622795d7f69fb744842174e",
+      "placeholders": {}
+    },
+    {
+      "template": "templates/agent-config.template.toml.in",
+      "output": "agent-config.template.toml",
+      "original_sha256": "1fb719caecf12893204fdc78946bc0e88d9e8cb18cad66773a034222433dd05c",
+      "template_sha256": "1fb719caecf12893204fdc78946bc0e88d9e8cb18cad66773a034222433dd05c",
+      "placeholders": {}
+    }
+  ]
+}

@@ -1,0 +1,130 @@
+# Private W111 recorded-speech no-action acceptance.
+# Render __ROOT__ to one fresh absolute directory and __MODEL_PORT__ to the
+# owned loopback forwarding proxy. Load from that directory using env={}.
+# Packaged prompt templates and fast-response schema remain unmodified.
+[model]
+base_url = "http://127.0.0.1:__MODEL_PORT__"
+completion_endpoint = "/completion"
+tokenize_endpoint = "/tokenize"
+health_endpoint = "/health"
+profile_name = "qwen38-27b-q8-full-262k"
+model_identity = "qwen38-27b-q8-full-262k"
+provider_name = "llama.cpp"
+thinking_mode = "disabled"
+chat_template_kwargs = { enable_thinking = false }
+api_key_env = ""
+structured_output_mode = "server_schema"
+cache_enabled = false
+cache_path = "__ROOT__/disabled-model-cache.json"
+max_retries = 0
+temperature = 0.0
+top_p = 1.0
+seed = 0
+timeout_seconds = 110
+connect_timeout_seconds = 5
+simple_timeout_seconds = 110
+structured_timeout_seconds = 110
+verification_timeout_seconds = 110
+benchmark_timeout_seconds = 110
+fail_safe_timeout_seconds = 110
+max_generation_wall_seconds = 110.0
+
+[runtime]
+completion_evaluation_enabled = false
+max_validation_recovery_cycles = 1
+max_pending_controls = 4
+max_pending_inference = 4
+
+[tools]
+enabled = []
+staged_discovery = false
+allow_stateful_tools = false
+allow_side_effect_tools = false
+read_roots = ["__ROOT__/readonly"]
+
+[sessions]
+root = "__ROOT__/sessions"
+write_projections = true
+
+[agent_data]
+root = "__ROOT__/agent-data"
+
+[logging]
+file_path = "__ROOT__/operations.jsonl"
+
+[editor]
+allow_writes = false
+
+[embedding_index]
+enabled = false
+base_url = ""
+
+[perception]
+enabled = false
+base_url = "http://127.0.0.1:9"
+
+[mcp]
+enabled = false
+
+[mcp.authorization]
+enabled = false
+
+[external_tools.mcp_servers]
+
+[a2a.authorization]
+enabled = false
+
+[a2a.push]
+enabled = false
+
+[a2a.extended_card]
+enabled = false
+
+[a2a.card_signing]
+enabled = false
+
+[communication]
+enabled = false
+enabled_tools = []
+model_base_url = ""
+model_chat_template_kwargs = { enable_thinking = false }
+preempt_shared_model = false
+fast_initial_reply = true
+fast_max_input_tokens = 4096
+fast_min_output_tokens = 64
+fast_desired_output_tokens = 144
+max_concurrent_requests = 1
+max_active_workers = 1
+max_pending_requests = 4
+idle_work_mode = "finish_only"
+host = "127.0.0.1"
+port = 8765
+
+[communication.model_routes]
+
+[communication.open_webui_artifacts]
+enabled = false
+
+[external_benchmarks]
+root = "__ROOT__/unused-benchmarks"
+
+[external_benchmarks.model_server]
+preflight_enabled = false
+
+[external_benchmarks.terminal_bench]
+allow_compose_download = false
+
+[external_benchmarks.agent_generation]
+allow_stateful_tools = false
+allow_side_effect_tools = false
+
+[external_benchmarks.targets.swebench_lite]
+enabled = false
+[external_benchmarks.targets.swebench_verified]
+enabled = false
+[external_benchmarks.targets.swebench_multilingual]
+enabled = false
+[external_benchmarks.targets.swebench_full]
+enabled = false
+[external_benchmarks.targets.terminal_bench]
+enabled = false

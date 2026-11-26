@@ -1,0 +1,14 @@
+{
+  "MODEL_BASE_URL": "http://127.0.0.1:9",
+  "ASR_URL": "http://127.0.0.1:9/v1/voice/transcribe-verify",
+  "TTS_URL": "http://127.0.0.1:9/synthesize-stream",
+  "BROKER_OWNER": "voice-runtime-demo/example",
+  "BROKER_HOST": "localhost",
+  "BROKER_EXECUTABLE": "/path/to/resource-broker",
+  "RUNNER_LEASE_HOST": "local_runtime",
+  "SPEECH_LEASE_HOST": "local_speech",
+  "AGENT_PYTHON": "/path/to/agent-python/bin/python",
+  "AGENT_SITE_PACKAGES": "/path/to/agent-python/lib/python3.11/site-packages",
+  "SQLITE_PRELOAD": "/path/to/qualified/libsqlite3.so.0",
+  "EVIDENCE_PREFIX": "/tmp/voice-runtime-evidence/"
+}
