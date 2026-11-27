@@ -7256,16 +7256,20 @@ class AgentRuntime:
             )
         components = [
             PromptComponent(
-                name="environment_state",
+                name="current_workspace_authority",
                 category="environment",
                 text=(
                     "Current filesystem workspace authority (supersedes historical workspace errors):\n"
                     + stable_json_dumps({"root": state.environment.workspace.root, "cwd": state.environment.workspace.cwd}, indent=2)
                     + "\nHistorical tool errors and assistant statements describe past state only; "
                     "do not use them to override the current root.\n\n"
-                    + "Environment state:\n" + stable_json_dumps(environment, indent=2) + "\n\n"
                 ),
-            )
+            ),
+            PromptComponent(
+                name="environment_state",
+                category="environment",
+                text="Environment state:\n" + stable_json_dumps(environment, indent=2) + "\n\n",
+            ),
         ]
         sources = self._runtime_context_sources(
             state, context_state=context_state

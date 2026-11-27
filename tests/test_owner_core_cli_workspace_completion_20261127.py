@@ -404,6 +404,7 @@ def test_current_root_authority_is_explicit_in_prompt_context(make_config, tmp_p
     components = runtime._runtime_context_components(state, Mock())
     rendered = "\n".join(component.text for component in components)
     assert "Current filesystem workspace authority" in rendered
+    assert any(component.name == "current_workspace_authority" for component in components)
     assert "supersedes historical workspace errors" in rendered
     assert str(new) in rendered
 
