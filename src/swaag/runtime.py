@@ -934,6 +934,7 @@ class AgentRuntime:
         mechanical_attempt = 0
         identical_tool_failures: dict[str, int] = {}
         completion_rejections = 0
+        redundant_discovery_cycles = 0
 
         while True:
             mechanical_attempt += 1
@@ -1278,6 +1279,39 @@ class AgentRuntime:
                     },
                 )
                 continue
+
+            # Tool schemas already loaded cannot become more informative by
+            # requesting them again. Preserve a single recovery opportunity
+            # for the model, then stop without an unnecessary new inference.
+            if (selected_action.tool_calls and all(
+                    call.tool_name == "load_tools"
+                    and isinstance(call.arguments.get("tool_names"), list)
+                    and set(call.arguments["tool_names"]) <= loaded_tool_names
+                    for call in selected_action.tool_calls)):
+                redundant_discovery_cycles += 1
+                self.history.record_event(state, "agent_action_rejected", {
+                    "action_index": action_index,
+                    "validation_attempt": 0,
+                    "reason": "redundant_tool_discovery",
+                    "attempt": redundant_discovery_cycles,
+                    "already_loaded": sorted(loaded_tool_names),
+                })
+                if redundant_discovery_cycles >= 2:
+                    return self._finish_turn(
+                        state,
+                        "I stopped because the model repeatedly requested tools "
+                        "already loaded without making progress. The task remains "
+                        "incomplete; inspect the previous tool error or choose a "
+                        "different, authorized operation before retrying.",
+                        tool_results, budget_reports,
+                    )
+                recovery_feedback = (
+                    "These tools are already loaded. Do not request load_tools "
+                    "again for them. Inspect the exact prior error, choose a "
+                    "concrete permitted action or state the blocker."
+                )
+                continue
+            redundant_discovery_cycles = 0
 
             # Output starvation applies to the call that exhibited it. A
             # successful complete action restores full-fidelity-first admission

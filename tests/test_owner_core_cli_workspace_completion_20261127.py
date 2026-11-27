@@ -302,3 +302,89 @@ def test_one_slot_model_timeout_exits_cli_with_visible_error_not_false_completed
     assert "ERROR: Coder has one occupied inference slot" in observed.err
     assert "completed" not in observed.out.lower()
     assert calls==["Tell me which scripts are in the requested directory.","closed"]
+
+
+
+def test_already_loaded_capability_discovery_stops_on_second_redundant_request(make_config):
+    config=make_config(model__context_limit=32000,
+                       tools__staged_discovery=True,
+                       runtime__max_turn_actions=12)
+    action=_action(tool_calls=[("load_tools", {"tool_names":["calculator"]})],continue_loop=True)
+    runtime,model=_model_runtime(config,[action,action,action])
+    result=runtime.run_turn("Use an already available calculator tool, then answer.")
+    assert "repeatedly requested tools already loaded" in result.assistant_text
+    assert "incomplete" in result.assistant_text
+    assert len(model.requests)==3
+    events=runtime.history.read_history(result.session_id)
+    assert sum(e.event_type=="tool_called" for e in events)==1
+    redundant=[e.payload for e in events if e.event_type=="agent_action_rejected"
+               and e.payload.get("reason")=="redundant_tool_discovery"]
+    assert [x["attempt"] for x in redundant]==[1,2]
+    assert all("calculator" in x["already_loaded"] for x in redundant)
+    assert sum(e.event_type=="turn_finished" for e in events)==1
+
+
+def test_real_persistent_orchestrator_authorized_file_listing_reaches_final_reply(make_config, tmp_path):
+    """Actual in-process durable orchestrator and tools, fake model only."""
+    from swaag.communication import CommunicationService
+    folder=tmp_path/"libexec";folder.mkdir()
+    (folder/"chatgpt_demo.sh").write_text("# deterministic test\n")
+    seen=[]
+    def finish(payload):
+        prompt=str(payload["prompt"])
+        assert 'chatgpt_demo.sh' in prompt
+        assert '"truncated": false' in prompt
+        seen.append(prompt[:100])
+        return _action(message="Found chatgpt_demo.sh in the requested directory.")
+    config=make_config(model__context_limit=32000,
+                       communication__poll_seconds=0.01,
+                       runtime__completion_evaluation_enabled=False)
+    runtime,model=_model_runtime(config, [
+        _action(message="I am checking the requested directory.",
+                tool_calls=[("list_files",{"path":str(folder)})],continue_loop=True),
+        finish,
+    ])
+    service=CommunicationService(runtime,orchestrator_runtime=runtime)
+    try:
+        events=list(service.iter_orchestrator_message("List the authorized chatgpt scripts in " +str(folder),control_id="read-only-exact-once"))
+        assert events[0]["event"]=="accepted"
+        assert events[-1]["event"]=="completed"
+        assert events[-1]["result"]["answer"]=="Found chatgpt_demo.sh in the requested directory."
+        assert len(model.requests)==2 and seen
+        history=runtime.history.read_history(events[-1]["session_id"])
+        tool=[e for e in history if e.event_type=="tool_result" and e.payload.get("tool_name")=="list_files"]
+        assert len(tool)==1 and tool[0].payload["output"]["truncated"] is False
+        assert any("chatgpt_demo.sh" in x for x in tool[0].payload["output"]["entries"])
+        assert sum(e.event_type=="turn_finished" for e in history)==1
+        assert not any(e.event_type=="tool_error" for e in history)
+    finally:
+        service.close()
+
+
+def test_real_persistent_orchestrator_denied_directory_returns_terminal_blocked_reply(make_config, tmp_path):
+    """No silent sibling fallback, no worker or model/tool replay on denial."""
+    from swaag.communication import CommunicationService
+    outside=tmp_path.parent/"other-repo"/"libexec"
+    config=make_config(model__context_limit=32000,
+                       runtime__completion_evaluation_enabled=False,
+                       communication__poll_seconds=0.01)
+    runtime,model=_model_runtime(config,[
+        _action(message="I am trying the exact requested path.",
+                tool_calls=[("list_files",{"path":str(outside)})],continue_loop=True),
+    ])
+    service=CommunicationService(runtime,orchestrator_runtime=runtime)
+    try:
+        events=list(service.iter_orchestrator_message("List the scripts under " +str(outside),control_id="denied-exact-once"))
+        assert events[0]["event"]=="accepted"
+        assert events[-1]["event"]=="completed"
+        answer=events[-1]["result"]["answer"]
+        assert "could not inspect" in answer.lower()
+        assert str(outside) in answer
+        assert "not inspected" in answer
+        assert len(model.requests)==1
+        history=runtime.history.read_history(events[-1]["session_id"])
+        assert sum(e.event_type=="tool_error" for e in history)==1
+        assert sum(e.event_type=="turn_finished" for e in history)==1
+        assert sum(e.event_type=="tool_called" for e in history)==1
+    finally:
+        service.close()
