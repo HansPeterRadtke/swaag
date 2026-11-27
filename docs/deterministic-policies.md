@@ -19,6 +19,10 @@ why they stay mechanical.
   reduced. Exhaustion fails explicitly instead of dropping source material.
 - Retry counts, connect/token timeouts, and backoff limit transport failure.
   They never convert a failed call into a semantic answer.
+- Per-turn action limits and counts of identical observed tool errors or rejected
+  completion verdicts prevent infinite repeated inference. These limits stop
+  with a truthful **incomplete** user-visible response; they never declare
+  success, substitute another filesystem target or invent the missing evidence.
 - Live backend identity, chat-template identity, cache keys, and exact replay
   matches are integrity facts. Missing exact replay data blocks a cached run
   rather than selecting a substitute answer.

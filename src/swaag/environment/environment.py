@@ -65,11 +65,18 @@ class AgentEnvironment:
         ]
 
     def list_files(self, path_text: str = ".") -> ToolExecutionResult:
-        entries = self.filesystem.list_files(path_text, cwd=self.current_cwd)
+        # A large repository can contain millions of files; a recursive
+        # sorted walk previously blocked the CLI and masked actionable errors.
+        entries, truncated = self.filesystem.bounded_file_manifest(
+            max_entries=self.config.agent_data.max_list_files,
+            path_text=path_text, cwd=self.current_cwd,
+        )
+        output = {"path": path_text, "entries": entries,
+                  "count": len(entries), "truncated": truncated}
         return ToolExecutionResult(
             tool_name="list_files",
-            output={"path": path_text, "entries": entries, "count": len(entries)},
-            display_text=f"list_files result: {stable_json_dumps({'path': path_text, 'entries': entries}, indent=2)}",
+            output=output,
+            display_text=f"list_files result: {stable_json_dumps(output, indent=2)}",
             generated_events=[
                 ToolGeneratedEvent(
                     "filesystem_listed",

@@ -5,6 +5,7 @@ import asyncio
 import argparse
 import json
 import sys
+import subprocess
 from dataclasses import asdict
 from pathlib import Path
 from typing import Sequence
@@ -24,9 +25,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
     ask_parser = subparsers.add_parser("ask", help="Run one foreground user turn through the persistent orchestrator.")
     ask_parser.add_argument("prompt", nargs="?", help="User prompt. If omitted, stdin is read.")
+    ask_parser.add_argument("--root", type=Path, help="Explicit filesystem workspace root for this invocation.")
     ask_parser.add_argument("--session", help="Explicit lower-level agent session to resume instead of the user orchestrator.")
 
     chat_parser = subparsers.add_parser("chat", help="Interactive foreground chat with the persistent orchestrator.")
+    chat_parser.add_argument("--root", type=Path, help="Explicit filesystem workspace root for this invocation.")
     chat_parser.add_argument("--session", help="Explicit lower-level agent session to resume instead of the user orchestrator.")
 
     doctor_parser = subparsers.add_parser("doctor", help="Check local llama.cpp connectivity and structured output paths.")
@@ -507,6 +510,38 @@ def main(argv: Sequence[str] | None = None) -> int:
         otlp_export_runtime = configure_otlp_export_from_environment()
 
     config = load_config(args.config)
+    if args.command in {"ask", "chat"}:
+        if args.root is not None:
+            # Only a direct CLI parameter changes explicit workspace authority.
+            try:
+                chosen_root = args.root.expanduser().resolve(strict=True)
+            except (OSError, RuntimeError) as exc:
+                parser.error(f"invalid --root: {exc}")
+            if not chosen_root.is_dir():
+                parser.error(f"--root is not a directory: {chosen_root}")
+            config.tools.read_roots = [chosen_root]
+        elif config.tools.read_roots == [Path(".")]:
+            # The packaged default means the current *project*, not a leaf
+            # executable directory such as /data/bin -> /data/infra/bin.
+            # Explicitly configured roots and non-Git folders remain scoped.
+            cwd = Path.cwd().resolve()
+            project_root = cwd
+            try:
+                probe = subprocess.run(
+                    ["git", "-C", str(cwd), "rev-parse", "--show-toplevel"],
+                    capture_output=True, text=True, timeout=3, check=False,
+                )
+                if probe.returncode == 0 and probe.stdout.strip():
+                    candidate = Path(probe.stdout.strip()).resolve(strict=True)
+                    if candidate.is_dir() and cwd.is_relative_to(candidate):
+                        project_root = candidate
+            except (OSError, subprocess.SubprocessError, RuntimeError):
+                pass
+            config.tools.read_roots = [project_root]
+        # Fingerprint the effective path authority, not only the unresolved
+        # packaged '.' string. Persisted history can then detect scope changes.
+        if isinstance(config.raw.get("tools"), dict):
+            config.raw["tools"]["read_roots"] = [str(path) for path in config.tools.read_roots]
     operations_log = configure_operations_log(
         config, component=f"cli:{args.command}"
     )

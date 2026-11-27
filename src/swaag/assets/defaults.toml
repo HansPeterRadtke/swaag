@@ -88,6 +88,11 @@ stop = []
 [runtime]
 lean_on_overflow = true
 max_validation_recovery_cycles = 2
+# Bounded ordinary user-turn recovery; independent existing validation budget
+# remains separate from actual tool failures or evaluator rejections.
+max_turn_actions = 32
+max_identical_tool_failures = 3
+max_completion_rejections = 3
 completion_evaluation_enabled = true
 # Durable unresolved-question capacity: reject additions, never silently discard.
 # Higher limits retain more open questions but consume more model context.

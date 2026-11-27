@@ -1027,8 +1027,9 @@ class ListFilesTool(Tool):
             "path": {"type": "string"},
             "entries": {"type": "array", "items": {"type": "string"}},
             "count": {"type": "integer"},
+            "truncated": {"type": "boolean"},
         },
-        "required": ["path", "entries", "count"],
+        "required": ["path", "entries", "count", "truncated"],
         "additionalProperties": False,
     }
     input_schema = _closed_input({"path": {"type": "string"}})

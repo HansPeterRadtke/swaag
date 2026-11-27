@@ -519,6 +519,19 @@ class AgentRuntime:
 
     def _ensure_environment_initialized(self, state: SessionState) -> None:
         environment = AgentEnvironment(self.config, state)
+        effective_root = str(environment.filesystem.workspace_root)
+        if (state.environment.workspace.root and
+                state.environment.workspace.root != effective_root):
+            # A persistent orchestrator may have been created from a former
+            # launch directory. Change authority only via a durable event.
+            self.history.record_event(state, "environment_initialized", {
+                "workspace_root": effective_root,
+                "cwd": effective_root,
+                "shell_env_overrides": dict(state.environment.shell.env_overrides),
+                "shell_unset_vars": list(state.environment.shell.unset_vars),
+                "listed_files": [],
+                "listing_truncated": True,
+            })
         for event in environment.initialize_events():
             self.history.record_event(
                 state,
@@ -919,10 +932,21 @@ class AgentRuntime:
         action_minimum_output_tokens = initial_action_output_minimum
         accepted_actions = 0
         mechanical_attempt = 0
+        identical_tool_failures: dict[str, int] = {}
+        completion_rejections = 0
 
         while True:
             mechanical_attempt += 1
             self._raise_if_run_cancelled(state)
+            if (accepted_actions >= self.config.runtime.max_turn_actions
+                    or mechanical_attempt > self.config.runtime.max_turn_actions * 4):
+                return self._finish_turn(
+                    state,
+                    "I stopped this task because its bounded action budget was exhausted "
+                    "without a verified completion. The requested work is not complete; "
+                    "review the preceding tool errors and retry with a narrower, authorized task.",
+                    tool_results, budget_reports,
+                )
             blocking_edits = apply_revision_controls(self, state)
             if blocking_edits:
                 text = "\n".join(item["question"] + " " + item["reason"] for item in blocking_edits)
@@ -1347,6 +1371,7 @@ class AgentRuntime:
                 )
                 all_tool_receipts_succeeded = True
                 interrupted_by_control = False
+                failed_tool_evidence: list[tuple[str, dict[str, Any]]] = []
                 for tool_call_index, tool_call in enumerate(selected_action.tool_calls, start=1):
                     pending_during_action = self.history.list_pending_control_messages(
                         state.session_id
@@ -1455,14 +1480,22 @@ class AgentRuntime:
                         break
                     if result is None:
                         all_tool_receipts_succeeded = False
+                        # Every failed invocation already recorded its exact
+                        # error and original input in the durable tool message.
+                        last_error = next((message.metadata for message in reversed(state.messages)
+                            if message.role == "tool" and message.name == tool_call.tool_name
+                            and isinstance(message.metadata, dict)
+                            and message.metadata.get("error_type")), None)
+                        if isinstance(last_error, dict):
+                            failed_tool_evidence.append((tool_call.tool_name, last_error))
                     if result is None and tool_call.tool_name != "load_tools":
                         # A genuine tool_error is already durable and visible
                         # in the next context. Give the normal combined-action
                         # model the same explicit recovery guidance that the
                         # single-responsibility model previously received.
-                        # This does NOT reject or cap identical tool calls:
-                        # an external file/service may become available on a
-                        # later attempt, so repetition remains a model decision.
+                        # Successful repetition and changed failure evidence
+                        # remain semantic decisions. Only an identical recorded
+                        # failure past the per-turn budget stops the turn.
                         recovery_feedback = (
                             f"The concrete invocation of {tool_call.tool_name!r} failed mechanically. "
                             "The capability remains available. Inspect the exact tool error already visible in "
@@ -1522,6 +1555,48 @@ class AgentRuntime:
                             pending_payloads=pending_during_action,
                         )
                         break
+                if failed_tool_evidence and not interrupted_by_control:
+                    for failed_tool_name, failure in failed_tool_evidence:
+                        arguments = failure.get("tool_input", {})
+                        if not isinstance(arguments, dict):
+                            arguments = {}
+                        requested_path = arguments.get("path", "")
+                        error_type = str(failure.get("error_type", ""))
+                        error_message = str(failure.get("error", ""))
+                        # If an EXACT user-requested absolute path is forbidden,
+                        # never inspect a similarly named directory instead.
+                        if (error_type == "FilesystemError"
+                                and error_message.startswith("Path is outside workspace:")
+                                and isinstance(requested_path, str)
+                                and Path(requested_path).is_absolute()
+                                and requested_path in original_request):
+                            actual_root = AgentEnvironment(self.config, state).filesystem.workspace_root
+                            return self._finish_turn(
+                                state,
+                                f"I could not inspect the requested path {requested_path}: "
+                                f"it is outside the authorized workspace {actual_root}. "
+                                "I have not inspected that directory or substituted another. "
+                                "If access is authorized, select the correct project workspace "
+                                "with --root before retrying.",
+                                tool_results, budget_reports,
+                            )
+                        signature = stable_json_dumps({
+                            "tool": failed_tool_name,
+                            "input": arguments,
+                            "error_type": error_type,
+                            "error": error_message,
+                        }, indent=None)
+                        identical_tool_failures[signature] = identical_tool_failures.get(signature, 0) + 1
+                        if identical_tool_failures[signature] >= self.config.runtime.max_identical_tool_failures:
+                            return self._finish_turn(
+                                state,
+                                f"I stopped after {identical_tool_failures[signature]} identical failed "
+                                f"{failed_tool_name} calls, without completing the task. "
+                                f"Last recorded error: {error_type}: {error_message}. "
+                                "Please correct the access or input before retrying; "
+                                "I will not search another directory as a substitute.",
+                                tool_results, budget_reports,
+                            )
                 if (not early_tool_acknowledged and not initial_reply_already_delivered
                         and not interrupted_by_control and all_tool_receipts_succeeded
                         and selected_action.assistant_message.strip()
@@ -1683,7 +1758,28 @@ class AgentRuntime:
                 )
                 continue
             if not completion["complete"]:
+                completion_rejections += 1
                 remaining = [str(item).strip() for item in completion.get("remaining_work", []) if str(item).strip()]
+                exhausted = completion_rejections >= self.config.runtime.max_completion_rejections
+                self.history.record_event(state, "completion_rejected", {
+                    "action_index": action_index,
+                    "reason": str(completion.get("reason", "")),
+                    "remaining_work": remaining,
+                    "attempt": completion_rejections,
+                    "max_attempts": self.config.runtime.max_completion_rejections,
+                    "retry_budget_exhausted": exhausted,
+                })
+                if exhausted:
+                    reason = str(completion.get("reason", "")).strip()
+                    return self._finish_turn(
+                        state,
+                        f"I stopped because {completion_rejections} completion evaluations "
+                        "did not verify the requested result. The task remains incomplete. "
+                        + (f"Latest assessment: {reason[:450]}. " if reason else "")
+                        + "Check the recorded tool evidence and correct the underlying blocker "
+                        "before starting another attempt.",
+                        tool_results, budget_reports,
+                    )
                 recovery_feedback = (
                     "An independent model reviewer rejected the candidate completion. "
                     "This is fallible model feedback, not new user authority or observed tool evidence. "
@@ -1695,7 +1791,6 @@ class AgentRuntime:
                     "the discrepancy in your action status and return the correct candidate for renewed "
                     "evaluation; do not manufacture an unnecessary effect to satisfy the reviewer."
                 )
-                self.history.record_event(state, "completion_rejected", {"action_index": action_index, "reason": str(completion.get("reason", "")), "remaining_work": remaining})
                 continue
 
             if self.history.list_pending_control_messages(state.session_id):

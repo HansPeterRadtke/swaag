@@ -78,6 +78,11 @@ class RuntimeConfig:
     max_pending_inference: int = 256
     max_open_questions: int = 128
     max_open_question_chars: int = 65536
+    # Mechanical safety budgets: a failed tool or fallible completion reviewer
+    # must not consume unlimited inference without observable progress.
+    max_turn_actions: int = 32
+    max_identical_tool_failures: int = 3
+    max_completion_rejections: int = 3
 
 
 @dataclass(slots=True)
@@ -1000,6 +1005,9 @@ def _coerce_config(
     _validate_positive("environment.max_capture_chars", environment.max_capture_chars)
     _validate_positive("runtime.tool_timeout_seconds", runtime.tool_timeout_seconds)
     _validate_positive("runtime.max_validation_recovery_cycles", runtime.max_validation_recovery_cycles)
+    _validate_positive("runtime.max_turn_actions", runtime.max_turn_actions)
+    _validate_positive("runtime.max_identical_tool_failures", runtime.max_identical_tool_failures)
+    _validate_positive("runtime.max_completion_rejections", runtime.max_completion_rejections)
     from swaag.capacity import positive_capacity
     for capacity_name, capacity_value in (
         ("model.cache_max_bytes", model.cache_max_bytes),
