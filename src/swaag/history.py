@@ -2086,6 +2086,16 @@ class HistoryStore:
             return
         if event.event_type == "environment_initialized":
             cwd = str(payload["cwd"])
+            # A new configured root replaces the live workspace projection,
+            # not the historical evidence. Never carry known contents or
+            # change lists from a previously authorized directory into a new
+            # workspace just because the session identity was reused.
+            if state.environment.workspace.root != str(payload["workspace_root"]):
+                state.environment.workspace.known_files.clear()
+                state.environment.workspace.created_files.clear()
+                state.environment.workspace.modified_files.clear()
+                state.environment.workspace.deleted_files.clear()
+                state.environment.workspace.last_snapshot_at = ""
             state.environment.workspace.root = str(payload["workspace_root"])
             state.environment.workspace.cwd = cwd
             state.environment.workspace.listed_files = [str(item) for item in payload.get("listed_files", [])]

@@ -388,3 +388,61 @@ def test_real_persistent_orchestrator_denied_directory_returns_terminal_blocked_
         assert sum(e.event_type=="tool_called" for e in history)==1
     finally:
         service.close()
+
+
+def test_current_root_authority_is_explicit_in_prompt_context(make_config, tmp_path):
+    """Historical workspace failures cannot masquerade as current authority."""
+    old = tmp_path / "old"; new = tmp_path / "new"
+    old.mkdir(); new.mkdir()
+    config = make_config()
+    config.tools.read_roots = [old]
+    runtime = AgentRuntime(config, model_client=FakeModelClient([]))
+    state = runtime.create_or_load_user_session("SWAAG Orchestrator")
+    config.tools.read_roots = [new]
+    runtime._ensure_environment_initialized(state)
+    assert state.environment.workspace.root == str(new)
+    components = runtime._runtime_context_components(state, Mock())
+    rendered = "\n".join(component.text for component in components)
+    assert "Current filesystem workspace authority" in rendered
+    assert "supersedes historical workspace errors" in rendered
+    assert str(new) in rendered
+
+
+
+def test_root_rebase_clears_old_project_file_content_without_erasing_history(make_config,tmp_path):
+    old=tmp_path/"old";new=tmp_path/"new"
+    old.mkdir();new.mkdir()
+    config=make_config(model__context_limit=32000)
+    config.tools.read_roots=[old]
+    runtime=AgentRuntime(config,model_client=FakeModelClient([]))
+    state=runtime.create_or_load_user_session("SWAAG Orchestrator")
+    runtime.history.record_event(state,"filesystem_read",{
+        "relative_path":"libexec/private_old.txt",
+        "text":"test-only old root content",
+        "cwd":str(old),
+        "path":str(old/"libexec/private_old.txt"),
+        "size_chars":len("test-only old root content"),
+    })
+    assert state.environment.workspace.known_files=={
+        "libexec/private_old.txt":"test-only old root content"}
+    state.environment.workspace.created_files=["old-only.txt"]
+    state.environment.workspace.modified_files=["old-only-edited.txt"]
+    state.environment.workspace.deleted_files=["old-only-deleted.txt"]
+    config.tools.read_roots=[new]
+    runtime._ensure_environment_initialized(state)
+    assert state.environment.workspace.root==str(new)
+    assert state.environment.workspace.known_files=={}
+    assert state.environment.workspace.listed_files==[]
+    assert state.environment.workspace.created_files==[]
+    assert state.environment.workspace.modified_files==[]
+    assert state.environment.workspace.deleted_files==[]
+    rebuilt=runtime.history.rebuild_from_history(state.session_id)
+    assert rebuilt.environment.workspace.root==str(new)
+    assert rebuilt.environment.workspace.known_files=={}
+    assert rebuilt.environment.workspace.listed_files==[]
+    history=runtime.history.read_history(state.session_id)
+    # The exact former file content remains in append-only history, not in the
+    # active workspace evidence that the model would mistakenly use.
+    assert any(e.event_type=="filesystem_read" and
+               e.payload.get("text")=="test-only old root content" for e in history)
+    assert sum(e.event_type=="environment_initialized" for e in history)==2
