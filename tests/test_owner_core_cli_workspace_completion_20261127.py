@@ -302,3 +302,21 @@ def test_one_slot_model_timeout_exits_cli_with_visible_error_not_false_completed
     assert "ERROR: Coder has one occupied inference slot" in observed.err
     assert "completed" not in observed.out.lower()
     assert calls==["Tell me which scripts are in the requested directory.","closed"]
+
+
+def test_current_root_authority_is_explicit_in_prompt_context(make_config, tmp_path):
+    """Historical workspace failures cannot masquerade as current authority."""
+    old = tmp_path / "old"; new = tmp_path / "new"
+    old.mkdir(); new.mkdir()
+    config = make_config()
+    config.tools.read_roots = [old]
+    runtime = AgentRuntime(config, model_client=FakeModelClient([]))
+    state = runtime.create_or_load_user_session("SWAAG Orchestrator")
+    config.tools.read_roots = [new]
+    runtime._ensure_environment_initialized(state)
+    assert state.environment.workspace.root == str(new)
+    components = runtime._runtime_context_components(state, Mock())
+    rendered = "\n".join(component.text for component in components)
+    assert "Current filesystem workspace authority" in rendered
+    assert "supersedes historical workspace errors" in rendered
+    assert str(new) in rendered
