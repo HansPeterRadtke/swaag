@@ -446,3 +446,22 @@ def test_root_rebase_clears_old_project_file_content_without_erasing_history(mak
     assert any(e.event_type=="filesystem_read" and
                e.payload.get("text")=="test-only old root content" for e in history)
     assert sum(e.event_type=="environment_initialized" for e in history)==2
+
+
+def test_explicit_directory_cannot_be_replaced_by_stale_history(make_config, tmp_path):
+    requested = tmp_path / 'libexec'; requested.mkdir()
+    (requested / 'chatgpt_example.sh').write_text('test')
+    wrong = tmp_path / 'bin'; wrong.mkdir()
+    config = make_config(model__context_limit=32000)
+    config.tools.read_roots = [tmp_path]
+    runtime, model = _model_runtime(config, [
+        _action(message='stale', tool_calls=[('list_files', {'path': str(wrong)})], continue_loop=True),
+        _action(message='correct', tool_calls=[('list_files', {'path': str(requested)})], continue_loop=True),
+        _action(message='Found the requested file.', continue_loop=False),
+    ])
+    result = runtime.run_turn(f'Find chatgpt scripts in {requested}.')
+    calls = [e.payload['tool_input']['path'] for e in runtime.history.read_history(result.session_id)
+             if e.event_type == 'tool_called' and e.payload.get('tool_name') == 'list_files']
+    assert calls == [str(requested)]
+    assert 'Found the requested file.' in result.assistant_text
+    assert len(model.requests) >= 2

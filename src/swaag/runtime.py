@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import inspect
 import json
+import re
 import sys
 import threading
 import time
@@ -1165,6 +1166,26 @@ class AgentRuntime:
                         raise ActionValidationError(
                             "A client-executed tool must be the only tool call in its action because the run pauses for the client result"
                         )
+                    # The active user's explicit absolute directory is authoritative.
+                    # Reject a model's stale-history substitution before any tool executes.
+                    requested_dirs = re.findall(
+                        r"(?i)\b(?:in|under|inside|within|from)\s+[`\"']?(/[^\s`\"',;!?]+)",
+                        original_request,
+                    )
+                    if len(requested_dirs) == 1:
+                        requested_dir = Path(requested_dirs[0].rstrip("./") or "/")
+                        if requested_dir.is_absolute():
+                            for call in action.tool_calls:
+                                if call.tool_name == "list_files":
+                                    target = call.arguments.get("path", ".")
+                                    if isinstance(target, str) and Path(target).is_absolute():
+                                        candidate = Path(target)
+                                        if candidate != requested_dir and requested_dir not in candidate.parents:
+                                            raise ActionValidationError(
+                                                f"The current user explicitly requested directory {requested_dir}; "
+                                                f"do not substitute {candidate} from historical context. "
+                                                "Use the requested directory or report a verified access error."
+                                            )
                     for tool_call in action.tool_calls:
                         try:
                             delegated_spec = delegated_by_name.get(tool_call.tool_name)
