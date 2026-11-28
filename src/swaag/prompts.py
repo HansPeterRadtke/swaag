@@ -229,8 +229,8 @@ class PromptBuilder:
                         seen_exact_tool_results[key] = event_sequence
                     elif first_event != event_sequence:
                         body = (
-                            "[BYTE-IDENTICAL REPEATED TOOL OUTPUT; full content above at "
-                            f"source event sequence={first_event}; this source event "
+                            "[BYTE-IDENTICAL REPEATED TOOL OUTPUT; full source retained at "
+                            f"event sequence={first_event}; this source event "
                             f"sequence={event_sequence}; sha256={key[1]}. "
                             "Both originals remain authoritative and retrievable "
                             "using history_window. No repeated tool action is implied.]"

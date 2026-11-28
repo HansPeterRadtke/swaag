@@ -3100,6 +3100,11 @@ class AgentRuntime:
         minimum_output_tokens = 128
         max_rounds = max(0, int(self.config.context.max_compaction_rounds))
         reduction_round = 0
+        # Evidence fetching is independent of context-overflow reduction.
+        # Never let a model repeatedly expand an ever-growing history catalog.
+        evidence_expansion_rounds = 0
+        max_evidence_expansion_rounds = 3
+        max_sources_per_expansion = 12
 
         def validate_completion_payload(payload: dict[str, Any]) -> dict[str, Any]:
             if contract.json_schema is not None:
@@ -3313,6 +3318,31 @@ class AgentRuntime:
                 else:
                     requested_sources = payload.get("evidence_requests", [])
                     if requested_sources:
+                        # A request for more evidence is never a completed
+                        # verdict. Bound both re-expansion round trips and a
+                        # single oversized source batch; leave originals and
+                        # the user's requested work intact on exhaustion.
+                        if (evidence_expansion_rounds >= max_evidence_expansion_rounds
+                                or len(requested_sources) > max_sources_per_expansion):
+                            outcome = {
+                                "complete": False,
+                                "reason": (
+                                    "Completion verification exceeded the bounded "
+                                    "historical-evidence retrieval allowance. "
+                                    "The requested result is not verified."
+                                ),
+                                "remaining_work": [
+                                    "Use the exact source event references in durable history "
+                                    "for a targeted follow-up; do not repeat the same "
+                                    "unverified completion claim."
+                                ],
+                                "evidence_expansion_budget_exhausted": True,
+                                "evidence_expansion_rounds": evidence_expansion_rounds,
+                                "evidence_sources_retrieved": list(reexpanded_evidence),
+                            }
+                            self.history.record_event(state, "completion_evaluated", outcome)
+                            return outcome
+                        evidence_expansion_rounds += 1
                         self._heartbeat(
                             state,
                             phase="completion_evaluation",
