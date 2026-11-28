@@ -64,10 +64,12 @@ def test_changed_source_and_already_started_run_are_refused(tmp_path):
 
 def test_broker_verification_never_promotes_queued_or_other_owner(monkeypatch):
     lease = "rb_fresh_test_123"
+    import time
     states = [
-        {"id": lease, "owner": BROKER_OWNER, "state": "active"},
-        {"id": lease, "owner": BROKER_OWNER, "state": "queued"},
-        {"id": lease, "owner": "someone-else", "state": "active"},
+        {"request_id": lease, "owner": BROKER_OWNER, "state": "active", "expires_at": time.time() + 3600},
+        {"request_id": lease, "owner": BROKER_OWNER, "state": "queued", "expires_at": time.time() + 3600},
+        {"request_id": lease, "owner": "someone-else", "state": "active", "expires_at": time.time() + 3600},
+        {"request_id": lease, "owner": BROKER_OWNER, "state": "active", "expires_at": time.time() - 1},
     ]
     def fake_status(record):
         return json.dumps({"machines": {"thor": {"requests": [record]}}}).encode()
@@ -75,7 +77,7 @@ def test_broker_verification_never_promotes_queued_or_other_owner(monkeypatch):
     assert broker_admitted(lease)["lease_id"] == lease
     for denied in states[1:]:
         monkeypatch.setattr(subprocess, "check_output", lambda *args, obj=denied, **kwargs: fake_status(obj).decode())
-        with pytest.raises(ValueError, match="not active"):
+        with pytest.raises(ValueError, match="not active|expired"):
             broker_admitted(lease)
 
 

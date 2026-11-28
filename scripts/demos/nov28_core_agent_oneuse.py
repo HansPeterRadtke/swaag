@@ -224,9 +224,14 @@ def broker_admitted(lease_id: str) -> dict:
     status = json.loads(data)
     records = status.get("machines", {}).get("thor", {}).get("requests", [])
     for item in records:
-        if item.get("id", item.get("reservation_id")) == lease_id:
-            if item.get("owner") != BROKER_OWNER or item.get("state", item.get("status")) not in ("active", "granted"):
+        # The real Raspi resource broker uses `request_id` (not `id`).
+        # Do not accept alternate guessed identities or stale authorizations.
+        if item.get("request_id") == lease_id:
+            if item.get("owner") != BROKER_OWNER or item.get("state") != "active":
                 raise ValueError("Broker lease belongs to a different owner or is not active")
+            expires = item.get("expires_at")
+            if type(expires) not in (int, float) or expires < time.time() + 60:
+                raise ValueError("Broker lease has expired or lacks safe launch headroom")
             return {"lease_id": lease_id, "owner": BROKER_OWNER, "state": "active", "verified_at": now()}
     raise ValueError("Active broker lease cannot be verified; no model request permitted")
 
