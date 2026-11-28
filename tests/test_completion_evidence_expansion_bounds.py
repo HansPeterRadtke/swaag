@@ -44,7 +44,7 @@ def test_completion_evidence_requests_stop_at_independent_bounds(
     monkeypatch.setattr(runtime, "_completion_evidence_source_inventory", lambda *a, **k: inventory)
     def expand(_state, *, source, **kwargs):
         requests.append(source["source_id"])
-        return {**source, "text": "Evidence retained exactly in durable history", "requested_purpose": "Verify"}
+        return {**source, "text": "Evidence retained exactly in durable history", "requested_purpose": "Verify", "integrity_verified": True}
     monkeypatch.setattr(runtime, "_reexpand_completion_evidence_source", expand)
     result = runtime._evaluate_completion(
         state, original_request="Verify all actual sources first.",
