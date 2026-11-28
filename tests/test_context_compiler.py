@@ -376,3 +376,26 @@ def test_evidence_projection_uses_compact_contract_specific_output_floor(make_co
         context_limit=2048,
     )
     assert completion.structured_output_floor_tokens >= config.budget_policy.structured_output_json_floor_tokens
+
+
+def test_compiler_exact_remote_input_total_has_honest_nonnegative_component_estimates(make_config):
+    from swaag.tokens import CountResult
+    full = ("system prompt " * 350) + ("user request " * 230) + "<end/>"
+    fragments = [PromptComponent(name="system", text="system prompt " * 350),
+                 PromptComponent(name="user", text="user request " * 230),
+                 PromptComponent(name="generation", text="<end/>")]
+    class Native:
+        def count_text(self, text):
+            if text == full: return CountResult(920, True, "native_provider")
+            return ConservativeEstimator().count_text(text)
+    cfg=make_config(model__context_limit=10000, context__safety_margin_tokens=64)
+    assembly=PromptAssembly(kind="action",prompt_mode="standard",prompt_text=full,
+                            components=fragments)
+    compilation=ContextCompiler(cfg).compile(assembly,agent_action_contract([]), Native(),
+                                           minimum_output_tokens=300)
+    rows=[c for c in compilation.report.breakdown if c.include_in_context]
+    assert compilation.report.input_tokens == 920
+    assert compilation.report.exact
+    assert compilation.report.safety_margin_tokens == 64
+    assert sum(x.tokens for x in rows) == 920
+    assert all(x.tokens >= 0 and not x.exact for x in rows)

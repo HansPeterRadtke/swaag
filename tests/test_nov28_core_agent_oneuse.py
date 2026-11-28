@@ -87,3 +87,32 @@ def test_independent_oracle_cannot_run_on_prepared_untouched_source(tmp_path):
     prepare(repo, folder)
     with pytest.raises(ValueError, match="has not finished"):
         read_recorded(repo, folder)
+
+
+def test_independent_verifier_rejects_tampered_durable_source_event(tmp_path):
+    """A finished-looking process receipt cannot excuse a corrupted journal."""
+    from dataclasses import asdict
+    from swaag.events import create_event
+    repo = _fresh_repo(tmp_path)
+    folder = tmp_path / "private"
+    manifest = prepare(repo, folder)
+    (folder / ".one_use_started.json").write_text(json.dumps({
+        "owner": BROKER_OWNER, "lease_id": "rb_synthetic_unit_only"}))
+    (folder / "real-cli-console.log").write_text("synthetic test, not an actual run\n")
+    (folder / "result.json").write_text(json.dumps({
+        "source_revision": manifest["source_revision"],
+        "console_sha256": sha((folder / "real-cli-console.log").read_bytes()),
+        "child_returncode": 0,
+        "terminal_turns": 1,
+    }))
+    log = folder / "sessions" / "session_synthetic" / "complete_history.jsonl"
+    log.parent.mkdir(parents=True)
+    event = create_event(session_id="session_synthetic", sequence=1,
+        event_type="message_added", prev_hash=None,
+        payload={"message": {"role": "user", "content": "actual original",
+                             "created_at": "2026-11-28T00:00:00Z"}})
+    tampered = asdict(event)
+    tampered["payload"]["message"]["content"] = "forged source while retaining event hash"
+    log.write_text(json.dumps(tampered) + "\n")
+    with pytest.raises(Exception, match="hash|schema|integrity|Event"):
+        read_recorded(repo, folder)

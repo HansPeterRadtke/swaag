@@ -157,6 +157,30 @@ def build_budget(
             )
         )
 
+    # A remote provider can supply an exact count only for the COMPLETE native
+    # chat request. Earlier component prefixes may have used a conservative
+    # estimate. If that estimate overshoots, the final exact correction can
+    # otherwise appear as a nonsensical *negative* cost on the last wrapper.
+    # The total is still authoritative; apportion its components by visible
+    # text length and disclose each allocation as estimated, never exact.
+    context_indices = [i for i, part in enumerate(components) if part.include_in_context]
+    if any(breakdown[i].tokens < 0 for i in context_indices):
+        weights = [len(components[i].text) for i in context_indices]
+        size = sum(weights)
+        if size:
+            numerators = [input_tokens * weight for weight in weights]
+            allocated = [numerator // size for numerator in numerators]
+            remainder = input_tokens - sum(allocated)
+            # Largest-remainder apportionment yields nonnegative integer
+            # components summing EXACTLY to the provider-counted request.
+            order = sorted(range(len(weights)),
+                           key=lambda k: (-(numerators[k] % size), k))
+            for position in order[:remainder]:
+                allocated[position] += 1
+            for index, tokens in zip(context_indices, allocated, strict=True):
+                breakdown[index].tokens = tokens
+                breakdown[index].exact = False
+
     required_tokens = input_tokens + response_tokens + safety_tokens
     return BudgetReport(
         context_limit=context_limit,

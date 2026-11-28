@@ -162,3 +162,51 @@ def test_valid_empty_provider_count_is_preserved():
                     FallbackTokenCounter(lambda text: 0)):
         assert counter.count_text("").tokens == 0
         assert counter.count_text("").exact
+
+
+def test_exact_remote_total_never_assigns_negative_tokens_to_last_wrapper(make_config) -> None:
+    """Provider full-request count overrides estimated prefixes, not their meaning."""
+    from swaag.tokens import CountResult
+
+    items = [
+        PromptComponent(name="system", category="system_prompt", text="SYSTEM" * 600),
+        PromptComponent(name="user", category="current_user", text="USER" * 350),
+        PromptComponent(name="protocol_suffix", category="wrapper", text="<end/>"),
+        PromptComponent(name="output_contract", category="constraint_schema",
+                        include_in_context=False, text="{schema}"),
+    ]
+    entire = "".join(item.text for item in items if item.include_in_context)
+    class Mixed:
+        def count_text(self, text):
+            if text == entire:
+                return CountResult(137, True, "provider_native_messages")
+            return ConservativeEstimator().count_text(text)
+    config = make_config(model__context_limit=2048)
+    report = build_budget(Mixed(), items, config.context, 2048,
+                          reserved_response_tokens=150, safety_margin_tokens=32)
+    assert report.input_tokens == 137
+    assert report.exact is True
+    assert report.required_tokens == 137 + 150 + 32
+    relevant = [row for row in report.breakdown if row.include_in_context]
+    assert all(row.tokens >= 0 for row in relevant)
+    assert sum(row.tokens for row in relevant) == 137
+    assert all(row.exact is False for row in relevant)
+    assert relevant[-1].tokens >= 0
+    assert report.breakdown[-1].include_in_context is False
+    assert report.breakdown[-1].tokens > 0
+
+
+def test_reweighted_remote_component_costs_preserve_admission_result(make_config) -> None:
+    from swaag.tokens import CountResult
+    items = [PromptComponent(name="body", text="abcd" * 200),
+             PromptComponent(name="end", text="suffix")]
+    full = "".join(item.text for item in items)
+    class Mixed:
+        def count_text(self, text):
+            return CountResult(110, True, "exact") if text == full else ConservativeEstimator().count_text(text)
+    cfg = make_config(model__context_limit=210)
+    report = build_budget(Mixed(), items, cfg.context, 210,
+                          reserved_response_tokens=90, safety_margin_tokens=20)
+    assert not report.fits and report.required_tokens == 220
+    assert sum(x.tokens for x in report.breakdown) == 110
+    assert all(x.tokens >= 0 for x in report.breakdown)

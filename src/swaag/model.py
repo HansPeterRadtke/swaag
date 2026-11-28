@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+import ipaddress
 import json
 import os
 from urllib.parse import urlparse
@@ -361,6 +362,117 @@ class LlamaCppClient:
         options["enable_thinking"] = enabled
         return {"chat_template_kwargs": options}
 
+    def _private_llama_chat_root(self) -> str | None:
+        """Only trust a verified private llama.cpp HTTP transport for native chat counting.
+
+        Generic OpenAI-compatible providers use their own message-tokenization
+        API and must never be probed with llama.cpp-specific endpoints.
+        """
+        if (self.config.model.provider_name.strip().lower() not in
+                {"llama.cpp", "llama_cpp", "llamacpp"} or not self._uses_chat_transport):
+            return None
+        parsed = urlparse(self._base)
+        if (parsed.scheme not in {"http", "https"} or parsed.path not in {"", "/v1"}
+                or parsed.username or parsed.password or parsed.query or parsed.fragment):
+            return None
+        if parsed.hostname not in {"localhost"}:
+            try:
+                address = ipaddress.ip_address(parsed.hostname or "")
+            except ValueError:
+                return None
+            if not (address.is_private or address.is_loopback):
+                return None
+        return self._base[:-3] if parsed.path == "/v1" else self._base
+
+    def _llama_chat_template_token_count(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        llama_root: str,
+    ) -> tuple[int, int | None]:
+        """Count the exact llama.cpp native chat serialization, with identity checks.
+
+        The remote /tokenize API on llama.cpp accepts `content`, NOT a list
+        of OpenAI messages. Ask /apply-template to render native roles first.
+        This is counting only; it never invokes /completion or changes models.
+        """
+        timeouts = (
+            self.config.model.connect_timeout_seconds,
+            min(self.config.model.timeout_seconds, 30),
+        )
+        def request_json(method: str, path: str, data: dict[str, Any] | None = None) -> dict[str, Any]:
+            call = requests.get if method == "GET" else requests.post
+            kwargs: dict[str, Any] = {
+                "timeout": timeouts,
+                **self._request_headers_kwargs(),
+            }
+            if data is not None:
+                kwargs["json"] = data
+            response = call(f"{llama_root}{path}", **kwargs)
+            try:
+                response.raise_for_status()
+                payload = response.json()
+                if not isinstance(payload, dict):
+                    raise ModelClientError("Native llama.cpp server returned a non-object response")
+                return payload
+            finally:
+                close = getattr(response, "close", None)
+                if callable(close):
+                    close()
+
+        def props_identity() -> tuple[str, int | None]:
+            props = request_json("GET", "/props")
+            template = props.get("chat_template")
+            if not isinstance(template, str) or not template.strip():
+                raise ModelClientError("Local llama.cpp properties lack a usable chat template")
+            model_alias = props.get("model_alias")
+            if (isinstance(model_alias, str) and model_alias.strip()
+                    and model_alias != self.config.model.profile_name):
+                raise ModelClientError("Native tokenization model alias differs from configured model")
+            generation = props.get("default_generation_settings")
+            n_ctx = generation.get("n_ctx") if isinstance(generation, dict) else None
+            if not isinstance(n_ctx, int) or isinstance(n_ctx, bool) or n_ctx <= 0:
+                n_ctx = None
+            identity = sha256_text(stable_json_dumps({
+                "template": template,
+                "template_caps": props.get("chat_template_caps"),
+                "model_alias": model_alias,
+                "model_path": props.get("model_path"),
+                "context_limit": n_ctx,
+            }, indent=None))
+            return identity, n_ctx
+
+        identity_before, capacity = props_identity()
+        rendered = request_json("POST", "/apply-template", {
+            "messages": messages,
+            **self._chat_template_options(),
+        }).get("prompt")
+        if not isinstance(rendered, str) or not rendered:
+            raise ModelClientError("Local llama.cpp did not render a native chat template")
+        cursor = 0
+        for message in messages:
+            # If a provider normalizes, truncates or rewrites actual message
+            # content, do not claim exact original-message accounting.
+            content = message["content"]
+            offset = rendered.find(content, cursor)
+            if offset < cursor:
+                raise ModelClientError("Native model template did not preserve original message content")
+            cursor = offset + len(content)
+        token_payload = request_json("POST", "/tokenize", {
+            "content": rendered,
+            "add_special": False,
+        })
+        count = _tokenizer_response_count(
+            token_payload,
+            count_field="n_tokens",
+            token_fields=("tokens",),
+            has_content=True,
+        )
+        identity_after, capacity_after = props_identity()
+        if identity_after != identity_before or capacity_after != capacity:
+            raise ModelClientError("Native llama.cpp chat template changed during token counting")
+        return count, capacity
+
     def _remote_tokenize_messages(
         self,
         messages: list[dict[str, str]],
@@ -647,14 +759,24 @@ class LlamaCppClient:
             tokenizer_context_limit = ""
             token_strategy = "conservative_estimator_required"
             try:
-                exact_count, discovered_limit = self._remote_tokenize_messages(messages)
+                llama_root = self._private_llama_chat_root()
+                if llama_root is None:
+                    exact_count, discovered_limit = self._remote_tokenize_messages(messages)
+                    counted_via = "provider_tokenize_messages"
+                else:
+                    exact_count, discovered_limit = self._llama_chat_template_token_count(
+                        messages, llama_root=llama_root,
+                    )
+                    counted_via = "llama_cpp_native_chat_template_tokenize"
             except Exception:
+                # Never pretend that an unavailable/altered tokenizer is exact.
+                # Keep the existing conservative capacity admission fallback.
                 pass
             else:
                 self._remote_prompt_tokens[sha256_text(prompt)] = exact_count
                 token_count = str(exact_count)
                 tokenizer_context_limit = str(discovered_limit or "")
-                token_strategy = "provider_tokenize_messages"
+                token_strategy = counted_via
             after = self._prompt_protocol_identity()
             if before != after:
                 raise ModelClientError(
