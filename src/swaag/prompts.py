@@ -323,6 +323,43 @@ class PromptBuilder:
     def template_text(self, template_name: str) -> str:
         return self._load_template(template_name)
 
+    @staticmethod
+    def _action_native_role_ranges(
+        assembly: PromptAssembly,
+        history: list[Message],
+        turn_transcript: list[Message],
+    ) -> PromptAssembly:
+        """Keep durable source messages distinct in chat transport.
+
+        Tool events are intentionally user-role quoted evidence: the current
+        JSON-action protocol has no provider tool_call_id/assistant tool_calls,
+        so a native tool message would be invalid or fabricate provenance.
+        The flat completion fallback and its exact component text are unchanged.
+        """
+        source_roles = {
+            **{f"conversation_history_{index}": message.role
+               for index, message in enumerate(history, 1)},
+            **{f"current_turn_{index}": message.role
+               for index, message in enumerate(turn_transcript, 1)},
+        }
+        ranges = [PromptMessageRange(role="system", component_start=1, component_end=2)]
+        current_role = "user"
+        start = 3
+        # The system prefix, separator and generation suffix are fallback-only.
+        # Every semantic component remains assigned exactly once.
+        for index in range(3, len(assembly.components) - 1):
+            component = assembly.components[index]
+            source_role = source_roles.get(component.name)
+            role = "assistant" if source_role == "assistant" else "user"
+            if role != current_role:
+                ranges.append(PromptMessageRange(role=current_role, component_start=start, component_end=index))
+                start = index
+                current_role = role
+        ranges.append(PromptMessageRange(role=current_role, component_start=start,
+                                         component_end=len(assembly.components) - 1))
+        assembly.message_ranges = ranges
+        return assembly
+
     def build_agent_action_prompt(
         self,
         messages: list[Message],
@@ -449,15 +486,14 @@ class PromptBuilder:
                 ),
             ))
         if foreground:
-            return self._assemble_with_system(
+            assembly = self._assemble_with_system(
                 "action", prompt_mode, self._load_template("system_foreground.txt"), components,
                 template_names=("system_foreground.txt", action_template))
-        return self._assemble(
-            "action",
-            prompt_mode,
-            components,
-            template_names=(action_template,),
-        )
+        else:
+            assembly = self._assemble(
+                "action", prompt_mode, components, template_names=(action_template,),
+            )
+        return self._action_native_role_ranges(assembly, history, turn_transcript)
 
 
     def build_agent_capability_selection_prompt(
@@ -604,12 +640,11 @@ class PromptBuilder:
                 ),
             )
         )
-        return self._assemble(
-            "action_tool_call",
-            "standard",
-            components,
-            template_names=(),
+        assembly = self._assemble(
+            "action_tool_call", "standard", components, template_names=(),
         )
+        history, _, turn_transcript = self.partition_turn(messages)
+        return self._action_native_role_ranges(assembly, history, turn_transcript)
 
     def build_agent_terminal_response_prompt(
         self,
