@@ -171,6 +171,7 @@ class PromptBuilder:
         optional: bool = False,
         tool_result_projections: dict[int, str] | None = None,
         compact_provenance: bool = False,
+        seen_exact_tool_results: dict[tuple[str, str], int] | None = None,
     ) -> list[PromptComponent]:
         components = [
             PromptComponent(
@@ -217,6 +218,23 @@ class PromptBuilder:
                         f"with history_window from active-session sequence {event_sequence}]\n"
                         + tool_result_projections[event_sequence].strip()
                     )
+                # Preserve durable source events, but deduplicate byte-identical
+                # large tool bodies in the model-facing request only.
+                if (seen_exact_tool_results is not None
+                        and type(event_sequence) is int and event_sequence > 0
+                        and len(body) >= 512):
+                    key = (message.name or "", sha256_text(body))
+                    first_event = seen_exact_tool_results.get(key)
+                    if first_event is None:
+                        seen_exact_tool_results[key] = event_sequence
+                    elif first_event != event_sequence:
+                        body = (
+                            "[BYTE-IDENTICAL REPEATED TOOL OUTPUT; full content above at "
+                            f"source event sequence={first_event}; this source event "
+                            f"sequence={event_sequence}; sha256={key[1]}. "
+                            "Both originals remain authoritative and retrievable "
+                            "using history_window. No repeated tool action is implied.]"
+                        )
             elif message.role == "summary":
                 provenance = summary_provenance_text(message)
             components.append(
@@ -377,6 +395,7 @@ class PromptBuilder:
         compact_foreground: bool = False,
     ) -> PromptAssembly:
         history, current_user, turn_transcript = self.partition_turn(messages)
+        seen_exact_tool_results: dict[tuple[str, str], int] = {}
         components = [
             PromptComponent(
                 name="original_user_request",
@@ -391,6 +410,7 @@ class PromptBuilder:
                 optional=True,
                 tool_result_projections=tool_result_projections,
                 compact_provenance=foreground,
+                seen_exact_tool_results=seen_exact_tool_results,
             ),
             PromptComponent(
                 name="current_user_turn",
@@ -408,6 +428,7 @@ class PromptBuilder:
                 header="Exact assistant actions and tool results since the current user message:",
                 tool_result_projections=tool_result_projections,
                 compact_provenance=foreground,
+                seen_exact_tool_results=seen_exact_tool_results,
             ),
         ]
         if pending_user_messages:
