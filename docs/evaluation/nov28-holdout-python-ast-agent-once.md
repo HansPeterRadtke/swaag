@@ -1,0 +1,21 @@
+# One-use holdout: SWAAG source inspection with a deterministic Python AST tool
+
+This is a **new independent** live model task, not a replay of the earlier source-file counting attempt or uncertain original provider actions. It is designed to measure whether a locally hosted Qwen Coder model actually selects the newly enabled, permission-checked `python_source_structure` tool and can complete a separate multi-step source analysis with a real calculation and controlled error recovery.
+
+**Frozen task:** The two source targets are `tests/test_history_replay.py` and `tests/test_control_authority.py`. The model must first attempt one deliberately missing `python_source_structure` path, observe the real tool error without repeating it, then invoke the structural analyzer once for each existing source file. It must use the exact resulting counts of top-level `test_` declarations to call the real `calculator` tool and provide a supported final answer including source paths, named first tests and the actual result. The independent verifier re-computes source AST counts from the SHA-pinned Git blobs (not from the model's answer), checks the entire hash-linked original event journal, all model/tool call IDs, original tool results and error-before-recovery chronology, native assistant/user message content, arithmetic inputs, completion verdict and final answer.
+
+**Authority:** The one-use runner is `scripts/demos/nov28_ast_reliability_oneuse.py`. Its configuration permits only `python_source_structure` and `calculator`, with the source checkout as the sole read root, side-effect tools disabled and model retries disabled. It uses native `/chat/completions` roles on the configured private numeric llama.cpp endpoint; no shell, browser, filesystem writes, external accounts, speech or Android capabilities are exposed to the model. The only filesystem writes by the harness are its own private evidence records. The original source and tool configuration are frozen before inference. A Raspi resource broker lease and original model identity verification are mandatory before one use. The runner writes an exclusive one-use marker before any model request; repeated/uncertain effects cannot be replayed. It bounds identical failures, tool count, model requests and elapsed time, and can terminate **only its own child**. Shared resident model services and other consumers are not restarted or stopped.
+
+**Verifying, not assuming:** The independent, read-only oracle is `scripts/demos/verify_nov28_ast_reliability_oneuse.py`; it writes a new immutable verdict after the child has exited. The prepare/run/verifier tests in `tests/test_nov28_ast_reliability_oneuse.py` cover empty run refusal, changed source, owner/model/tool authority, unsafe public endpoints, one-use replay prevention and tampered event hashes. The model result is accepted as `verified_first_pass` only if all source-backed independent checks pass; a normal child exit or a model `complete=true` verdict does not qualify. A failed attempt remains failed, and its original journal and source hashes are preserved. Publishing these entrypoints and passing isolated tests do **not** constitute a fresh live-model demonstration.
+
+Qualified example commands, to be executed from the verified clean canonical checkout with the existing process-local approved Python and SQLite runtime, and *only* with a current separately admitted broker lease and registered resource dependency:
+
+```bash
+python -m scripts.demos.nov28_ast_reliability_oneuse --repo "$REPO" --evidence "$FRESH_PRIVATE" --prepare
+SWAAG_NOV28_AST_ACCEPTANCE_ONCE=1 python -m scripts.demos.nov28_ast_reliability_oneuse \
+  --repo "$REPO" --evidence "$FRESH_PRIVATE" --run --lease-id "$ACTIVE_OWN_BROKER_LEASE"
+python -m scripts.demos.verify_nov28_ast_reliability_oneuse \
+  --repo "$REPO" --evidence "$FRESH_PRIVATE" --out "$FRESH_PRIVATE/independent-verdict.json"
+```
+
+Prior genuine failure evidence remains untouched. This task is a targeted reliability measurement of general structured source inspection, not proof of correctness on arbitrary computer work or provider-native structured `tool_call_id` support. No Voice Assistant, production model deployment, private user source or provider account effects are authorized.
