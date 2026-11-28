@@ -1083,6 +1083,129 @@ class ReadFileTool(Tool):
         return context.environment.read_file(validated_input["path"])
 
 
+class PythonSourceStructureTool(Tool):
+    """Exact, non-executing structural evidence from a scoped Python file."""
+
+    name = "python_source_structure"
+    description = (
+        "Parse one permitted Python source file with the standard AST parser "
+        "without executing it. Return exact top-level function, test function "
+        "and class declarations, names and line numbers with source hash."
+    )
+    usage_guidance = (
+        "When a user needs declaration names or counts in Python source, "
+        "prefer this exact structural tool over guessing or manually counting "
+        "displayed source snippets. It does not execute imports or code, and "
+        "it does not decide which declarations are semantically relevant."
+    )
+    kind = "stateful"
+    input_schema = _closed_input({"path": {"type": "string"}})
+    output_schema = {
+        "type": "object",
+        "properties": {
+            "path": {"type": "string"},
+            "relative_path": {"type": "string"},
+            "source_sha256": {"type": "string"},
+            "source_size_chars": {"type": "integer"},
+            "top_level_functions": {"type": "array", "items": {
+                "type": "object", "properties": {
+                    "name": {"type": "string"},
+                    "line": {"type": "integer"},
+                    "async": {"type": "boolean"},
+                }, "required": ["name", "line", "async"],
+                "additionalProperties": False,
+            }},
+            "top_level_classes": {"type": "array", "items": {
+                "type": "object", "properties": {
+                    "name": {"type": "string"}, "line": {"type": "integer"},
+                }, "required": ["name", "line"],
+                "additionalProperties": False,
+            }},
+            "counts": {"type": "object", "properties": {
+                "top_level_functions": {"type": "integer"},
+                "top_level_test_functions": {"type": "integer"},
+                "top_level_classes": {"type": "integer"},
+            }, "required": ["top_level_functions", "top_level_test_functions", "top_level_classes"],
+                "additionalProperties": False},
+        },
+        "required": ["path", "relative_path", "source_sha256", "source_size_chars",
+                     "top_level_functions", "top_level_classes", "counts"],
+        "additionalProperties": False,
+    }
+    # A single call cannot force the agent to parse an arbitrary-sized input.
+    # Exceeding this limit is an explicit tool error, never an incomplete count.
+    MAX_SOURCE_BYTES = 2_000_000
+    MAX_DECLARATIONS = 4096
+
+    def validate(self, raw_input: dict[str, Any]) -> dict[str, Any]:
+        path = raw_input.get("path")
+        if not isinstance(path, str) or not path.strip():
+            raise ToolValidationError("python_source_structure.path must be a non-empty string")
+        return {"path": path}
+
+    def required_generated_event_types(self, validated_input: dict[str, Any]) -> set[str]:
+        return {"file_read_requested", "filesystem_read"}
+
+    def execute(self, validated_input: dict[str, Any], context: ToolContext) -> ToolExecutionResult:
+        path_text = validated_input["path"]
+        filesystem = context.environment.filesystem
+        path = filesystem.resolve_existing_file_path(path_text, cwd=context.environment.current_cwd)
+        if path.stat().st_size > self.MAX_SOURCE_BYTES:
+            raise ToolValidationError("Python source file exceeds exact AST size limit; no count inferred")
+        # Reuse the identical permission-checked read_file path and its full
+        # original source events; do not create a second parallel filesystem
+        # access or silently skip unread portions.
+        read = context.environment.read_file(path_text)
+        content = read.output["text"]
+        if len(content.encode("utf-8")) > self.MAX_SOURCE_BYTES:
+            raise ToolValidationError("Python source changed/grew beyond exact AST size limit")
+        try:
+            tree = ast.parse(content, filename=read.output["relative_path"])
+        except SyntaxError as exc:
+            raise ToolValidationError(
+                f"Python source syntax error at line {exc.lineno}; no AST count is available"
+            ) from exc
+        functions = [
+            {"name": node.name, "line": node.lineno,
+             "async": isinstance(node, ast.AsyncFunctionDef)}
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        ]
+        classes = [
+            {"name": node.name, "line": node.lineno}
+            for node in tree.body if isinstance(node, ast.ClassDef)
+        ]
+        if len(functions) + len(classes) > self.MAX_DECLARATIONS:
+            raise ToolValidationError("Python source has too many AST declarations; no partial count returned")
+        output = {
+            "path": read.output["path"],
+            "relative_path": read.output["relative_path"],
+            "source_sha256": sha256_text(content),
+            "source_size_chars": len(content),
+            "top_level_functions": functions,
+            "top_level_classes": classes,
+            "counts": {
+                "top_level_functions": len(functions),
+                "top_level_test_functions": sum(
+                    item["name"].startswith("test_") for item in functions
+                ),
+                "top_level_classes": len(classes),
+            },
+        }
+        events = [
+            ToolGeneratedEvent(event.event_type,
+                {**event.payload, "reason": "python_source_structure"}
+                if event.event_type == "file_read_requested"
+                else event.payload, event.metadata)
+            for event in read.generated_events
+        ]
+        return ToolExecutionResult(
+            self.name, output,
+            tool_result_display(self.name, output),
+            generated_events=events,
+        )
+
+
 class SearchInFileTool(Tool):
     name = "search_in_file"
     description = "Search one workspace file for a literal string or regex and return an exact resumable page of match locations."
@@ -1823,6 +1946,7 @@ BUILTIN_TOOLS = [
     CalculatorTool(),
     ListFilesTool(),
     ReadFileTool(),
+    PythonSourceStructureTool(),
     SearchInFileTool(),
     SearchRepoTool(),
     ReadTextTool(),

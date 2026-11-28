@@ -78,6 +78,14 @@ why they stay mechanical.
 - Exit codes, persisted file hashes, diffs, schema validation, and executable
   tests are evidence. They constrain independent semantic completion evaluation
   but do not synthesize a final answer.
+- A model's structured completion output must obey its own declared contract:
+  `complete=true` cannot coexist with a nonempty `remaining_work` array.
+  Contradictions fail closed with the exact original output preserved and an
+  evidence-reassessment request; a model is never credited as complete merely
+  because a list item says "No remaining work". A consistent output is **not**
+  automatically a true or independently verified outcome. Exact code-derived
+  counts belong to explicitly model-selected, permission-checked source tools;
+  Python does not infer user intent or declaration relevance from keywords.
 
 ## Workers and inference
 

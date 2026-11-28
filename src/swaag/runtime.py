@@ -3432,9 +3432,28 @@ class AgentRuntime:
                     ]
                     if specialist_rows:
                         complete = False
+                    # A complete verdict with ANY remaining-work item is an
+                    # internally contradictory structured outcome, regardless
+                    # of how reassuring that item sounds. Never silently
+                    # normalize a model-authored string such as "No remaining
+                    # work" into an empty proof list. This is a protocol
+                    # invariant, not a model-independent judgment about the
+                    # user's semantic objective. Fail closed and preserve the
+                    # exact rejected model fields in the event audit.
+                    completion_claim_inconsistent = (
+                        not single_verdict
+                        and complete
+                        and bool(payload.get("remaining_work", []))
+                    )
+                    if completion_claim_inconsistent:
+                        complete = False
                     result = {
                         "complete": complete,
                         "reason": (
+                            "Completion verdict is inconsistent: complete=true with "
+                            "nonempty remaining_work; this does not establish "
+                            "the requested outcome."
+                            if completion_claim_inconsistent else
                             "single-responsibility completion verdict: complete"
                             if single_verdict and complete
                             else "single-responsibility completion verdict: incomplete"
@@ -3442,7 +3461,14 @@ class AgentRuntime:
                             else str(payload.get("reason", "")).strip()
                         ),
                         "remaining_work": (
-                            specialist_remaining
+                            [
+                                "Reassess the original requested outcomes against "
+                                "the actual source/tool evidence. Do not merely "
+                                "erase the remaining_work text; correct factual "
+                                "inconsistencies before seeking a new verdict."
+                            ]
+                            if completion_claim_inconsistent
+                            else specialist_remaining
                             if specialist_rows
                             else []
                             if single_verdict
@@ -3473,6 +3499,15 @@ class AgentRuntime:
                         ),
                         "projected_source_event_sequences": sorted(projections),
                         "specialist_evidence_required": bool(specialist_rows),
+                        "completion_claim_inconsistent": completion_claim_inconsistent,
+                        "model_claimed_complete": bool(payload.get("complete", False)),
+                        "model_reported_reason": (
+                            str(payload.get("reason", "")) if not single_verdict else ""
+                        ),
+                        "model_reported_remaining_work": (
+                            list(payload.get("remaining_work", []))
+                            if not single_verdict else []
+                        ),
                         "reexpanded_evidence_sources": [
                             {
                                 key: value
