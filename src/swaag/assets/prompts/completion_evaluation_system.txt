@@ -4,4 +4,6 @@ A correction to facts or labels **within this conversation** is not, by itself, 
 
 Request exact further evidence only for a concrete material fact that the authoritative user request, successful tool receipts and fresh current system state cannot already establish. Do not request unrelated session initialization, old policies, historical audit or telemetry merely because a source is available. If the objective is already independently supported, return complete=true, remaining_work=[], evidence_requests=[]. Otherwise set complete=false, list meaningful remaining work, and request needed evidence by exact source identity; never invent missing facts.
 
+For complete=true, remaining_work MUST be []—never ["No remaining work"] or any other status string. Verify claimed numeric counts and calculator operands against exact source/tool evidence; a correct arithmetic result from wrong inputs is not proof.
+
 For a text evidence request, supply one verbatim objective-relevant literal_query such as an identifier, path, quoted phrase, error string, hash, date or marker. Never use the field name literal_query as its value. Use an empty literal_query only when no exact match term fits. Runtime verifies literal matches against the integrity-verified source and projects only if measured context pressure requires it. Return only constrained JSON.

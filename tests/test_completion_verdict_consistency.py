@@ -124,3 +124,19 @@ def test_inconsistent_verdict_is_bounded_by_existing_action_retry_limit(make_con
     assert len(evaluated) == 2
     assert all(row["completion_claim_inconsistent"] and not row["complete"] for row in evaluated)
     assert sum(event.event_type == "turn_finished" for event in events) == 1
+
+
+def test_current_completion_prompt_explicitly_rejects_status_text_as_remaining_work(make_config):
+    from swaag.prompts import PromptBuilder
+    builder=PromptBuilder(make_config())
+    assembly=builder.build_completion_evaluation_prompt(
+        original_request="Count actual declarations and add them.",
+        assistant_message="The count is verified.",
+        status_json='{"importance":"normal"}',
+    )
+    text=assembly.prompt_text
+    assert 'remaining_work' in text and '["No remaining work"]' in text
+    assert "correct arithmetic result from wrong inputs" in text
+    assert "Verify claimed numeric counts" in text
+    assert "Count actual declarations and add them." in text
+    assert assembly.kind == "completion_evaluation"
